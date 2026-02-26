@@ -53,22 +53,18 @@ Lightweight. Fast. Efficient.
 ---
 
 ** 📸 Screenshots**
+ Screenshots
 
-<p align="center">
-  <img src="screenshots/client-dashboard.jpg" width="800">
-</p>
+![Screenshot 1](screenshots/Screenshot_20260226_232404_Chrome.jpg)
+![Screenshot 2](screenshots/Screenshot_20260226_232444_Chrome.jpg)
+![Screenshot 3](screenshots/Screenshot_20260226_232518_Chrome.jpg)
+![Screenshot 4](screenshots/Screenshot_20260226_232551_Chrome.jpg)
+![Screenshot 5](screenshots/Screenshot_20260226_232629_Chrome.jpg)
+![Screenshot 6](screenshots/Screenshot_20260226_232646_Chrome.jpg)
+![Screenshot 7](screenshots/Screenshot_20260226_232714_Chrome.jpg)
+![Screenshot 8](screenshots/Screenshot_20260226_233004_Chrome.jpg)
+![Screenshot 9](screenshots/Screenshot_20260226_233146_Chrome.jpg)
 
-<p align="center">
-  <img src="screenshots/admin-dashboard.jpg" width="800">
-</p>
-
-<p align="center">
-  <img src="screenshots/panda-assistant.jpg" width="800">
-</p>
-
-<p align="center">
-  <img src="screenshots/csv-analysis.jpg" width="800">
-</p>
 
 ---
 
