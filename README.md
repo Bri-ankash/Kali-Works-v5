@@ -52,6 +52,26 @@ Lightweight. Fast. Efficient.
 
 ---
 
+** 📸 Screenshots**
+
+<p align="center">
+  <img src="screenshots/client-dashboard.jpg" width="800">
+</p>
+
+<p align="center">
+  <img src="screenshots/admin-dashboard.jpg" width="800">
+</p>
+
+<p align="center">
+  <img src="screenshots/panda-assistant.jpg" width="800">
+</p>
+
+<p align="center">
+  <img src="screenshots/csv-analysis.jpg" width="800">
+</p>
+
+---
+
 **🛠 Tech Stack**
 Layer
 Technology
