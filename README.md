@@ -1,6 +1,5 @@
 **🚀 Kali Works V5**
 Intelligent Financial SaaS Platform
-� � � � �
 
 ---
 
