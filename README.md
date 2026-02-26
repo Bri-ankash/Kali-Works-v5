@@ -114,7 +114,7 @@ Sensitive files excluded via .gitignore
 
 **📬 Contact Me**
 👨‍💻 GitHub
-https://github.com/Bri-ankash�
+https://github.com/Bri-ankash/
 📧 Email
 briankash61@gmail.com
 
