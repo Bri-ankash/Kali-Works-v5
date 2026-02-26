@@ -1,60 +1,125 @@
-Kali Works V5 – Production SaaS
-Kali Works V5 is a lightweight, fast, and secure SaaS platform designed to manage client accounts, upload CSV data, and provide insights through an intelligent Panda assistant. It supports both free and premium clients, with premium clients getting enhanced analysis features.
-Features
-Client Management
-Registration, email verification, and admin approval.
-Account blocking/unblocking by admin.
-Premium status toggling for clients.
-Panda Assistant
-Provides financial insights from uploaded CSVs.
-Free clients have access to basic queries (e.g., “Where do I upload my PDF?” or “Am I making a profit?”).
-Premium clients receive full analysis, including profit/loss breakdown and top consumers.
-CSV Uploads & Analysis
-Upload CSV files with transaction data.
-Automatic analysis of income, expenses, and money leaks.
-Admin Features
-Mandatory 2FA for admin login.
-Dashboard showing client statistics.
-Approve clients, toggle premium status, block/unblock accounts.
-Audit logs for admin actions.
-Security
-Passwords hashed with SHA-256.
-Session expiration for both clients and admin.
-Sensitive files (.env, database, virtual environment) ignored in Git via .gitignore.
-Tech Stack
-Python 3.11+
+**🚀 Kali Works V5**
+Intelligent Financial SaaS Platform
+� � � � �
+
+---
+
+**🎯 Overview**
+Kali Works V5 is a lightweight, secure, and intelligent SaaS platform designed to manage financial data through CSV uploads, smart analytics, and an integrated Panda Assistant.
+Built for speed, clarity, and structured client management.
+
+---
+
+**🌟 Core Features**
+
+**👥 Client Dashboard**
+Secure login & email verification
+Account approval system
+Premium status management
+CSV upload interface
+Financial summaries (Money In, Money Out, Profit/Loss)
+Panda Assistant access
+
+**🤖 Panda Assistant**
+Available to all users:
+Basic navigation help
+Simple profit questions
+Upload guidance
+
+**Premium Users Unlock:**
+Advanced CSV analysis
+Profit breakdown
+Top consumers detection
+Money leak identification
+
+**🔐 Admin Dashboard**
+🔒 Mandatory 2FA login
+👤 Approve / Reject new clients
+⭐ Toggle Premium access
+🚫 Block / Unblock clients
+📊 View platform statistics
+📝 Audit logging system
+
+---
+
+**📊 CSV Financial Analysis Engine**
+Automatically calculates:
+💰 Total Money In
+💸 Total Money Out
+📈 Profit / Loss
+⚠️ Money Leaks (e.g., gambling patterns)
+🏆 Top Consumers
+Lightweight. Fast. Efficient.
+
+---
+
+**🛠 Tech Stack**
+Layer
+Technology
+Backend
 FastAPI
+Language
+Python 3.11+
+Database
 SQLite
-Jinja2 Templates
-Termux (for development on mobile)
-SMTP for email notifications
-Setup & Run (Termux)
-Clone the repository:
-Bash
-Copy code
-git clone https://github.com/Bri-ankash/kali-works-v5.git
+Templates
+Jinja2
+Email
+SMTP (Gmail)
+Deployment
+Render / Cloud Ready
+Dev Env
+Termux
+
+---
+
+**⚙️ Installation (Termux)**
+
+**1️⃣ Clone Repository**
+git clone https://github.com/Bri-ankash/kali-works-v5.git�
 cd kali-works-v5
-Create and activate a virtual environment:
-Bash
-Copy code
+
+**2️⃣ Create Virtual Environment**
 python3 -m venv venv
 source venv/bin/activate
-Install dependencies:
-Bash
-Copy code
+
+**3️⃣ Install Dependencies**
 pip install -r requirements.txt
-Run the application:
-Bash
-Copy code
+
+**4️⃣ Run Application**
 uvicorn main:app --reload
-Access the app at http://127.0.0.1:8000/.
-File Structure
-main.py – Application logic and routes.
-templates/ – HTML templates for client/admin dashboards.
-static/ – CSS, JS, images.
-uploads/ – Uploaded CSV files (auto-created).
-kaliworks.db – SQLite database (ignored in Git).
-.env – Environment variables for sensitive info (ignored in Git).
-Contact Me
-GitHub: Bri-ankash�
-Email: briankash61@gmail.com
+
+**5️⃣ Open in Browser**
+http://127.0.0.1:8000�
+
+---
+
+**📂 Project Structure**
+main.py → Core FastAPI logic
+templates/ → Client & Admin HTML dashboards
+static/ → CSS & frontend assets
+uploads/ → CSV storage (ignored in Git)
+kaliworks.db → SQLite database (ignored)
+.env → Environment variables (ignored)
+
+---
+
+**🔒 Security Highlights**
+SHA-256 password hashing
+Admin 2FA mandatory
+Session expiration system
+Sensitive files excluded via .gitignore
+
+---
+
+**📬 Contact Me**
+👨‍💻 GitHub
+https://github.com/Bri-ankash�
+📧 Email
+briankash61@gmail.com
+
+---
+
+**🏆 Kali Works Philosophy**
+Lightweight. Secure. Structured. Intelligent.
+Built with precision. Designed for growth.
