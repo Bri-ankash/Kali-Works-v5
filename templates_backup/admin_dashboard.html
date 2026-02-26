@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Kali Works – Executive Control Center</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #0f172a;
+            color: #f1f5f9;
+        }
+        .sidebar {
+            width: 240px;
+            height: 100vh;
+            position: fixed;
+            background-color: #111827;
+            padding: 30px 20px;
+        }
+        .sidebar h2 {
+            color: #c9a227;
+            margin-bottom: 40px;
+        }
+        .sidebar a {
+            display: block;
+            margin-bottom: 20px;
+            text-decoration: none;
+            color: #94a3b8;
+        }
+        .sidebar a:hover { color: white; }
+        .main { margin-left: 260px; padding: 40px; }
+        .section-title { margin-bottom: 20px; font-size: 20px; color: #c9a227; }
+        .metrics { display: flex; gap: 20px; margin-bottom: 40px; flex-wrap: wrap; }
+        .card {
+            background-color: #1e293b;
+            padding: 25px;
+            border-radius: 16px;
+            flex: 1;
+            min-width: 200px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+        }
+        .metric-number { font-size: 28px; font-weight: bold; margin-top: 10px; }
+        table {
+            width: 100%; border-collapse: collapse;
+            background-color: #1e293b; border-radius: 12px; overflow: hidden;
+        }
+        th, td { padding: 14px; text-align: left; }
+        th { background-color: #111827; color: #c9a227; }
+        tr:nth-child(even) { background-color: #16202d; }
+        input[type="text"] { padding: 6px; border-radius: 6px; border: 1px solid #334155; background-color: #0f172a; color: white; }
+        button { padding: 6px 10px; border-radius: 6px; border: none; cursor: pointer; margin-top: 5px; }
+        .approve-btn { background-color: #2563eb; color: white; }
+        .premium-btn { background-color: #c9a227; color: black; }
+        .block-btn { background-color: #ef4444; color: white; }
+        .badge { padding: 5px 10px; border-radius: 20px; font-size: 12px; }
+        .badge-premium { background-color: #c9a227; color: black; }
+        .badge-normal { background-color: #334155; }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <h2>Kali Works</h2>
+    <a href="#">Dashboard</a>
+    <a href="#">New Registrations</a>
+    <a href="#">Approved Clients</a>
+    <a href="#">Audit Logs</a>
+</div>
+
+<div class="main">
+    <div class="section-title">Executive Overview</div>
+
+    <div class="metrics">
+        <div class="card">
+            Total Clients
+            <div class="metric-number">{{ total }}</div>
+        </div>
+        <div class="card">
+            Premium Clients
+            <div class="metric-number">{{ premium_count }}</div>
+        </div>
+        <div class="card">
+            Blocked Clients
+            <div class="metric-number">{{ blocked_count }}</div>
+        </div>
+        <div class="card">
+            Verified Emails
+            <div class="metric-number">{{ verified_count }}</div>
+        </div>
+        <div class="card">
+            Pending Approvals
+            <div class="metric-number">{{ pending_count }}</div>
+        </div>
+    </div>
+
+    <div class="section-title">Client Growth</div>
+    <canvas id="growthChart" height="100"></canvas>
+
+    <div class="section-title">Pending Approvals</div>
+    <table>
+        <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Assign Account</th>
+            <th>Approve</th>
+        </tr>
+        {% for client in new_regs %}
+        <tr>
+            <td>{{ client[1] }} {{ client[2] }}</td>
+            <td>{{ client[4] }}</td>
+            <td>
+                <form method="post" action="/approve_client">
+                    <input type="hidden" name="client_id" value="{{ client[0] }}">
+                    <input type="text" name="account_number" required>
+            </td>
+            <td>
+                    <button class="approve-btn" type="submit">Approve</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <br><br>
+
+    <div class="section-title">Approved Clients</div>
+    <table>
+        <tr>
+            <th>Account</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Premium</th>
+            <th>Block</th>
+        </tr>
+        {% for client in approved_clients %}
+        <tr>
+            <td>{{ client[7] }}</td>
+            <td>{{ client[1] }} {{ client[2] }}</td>
+            <td>{{ client[4] }}</td>
+            <td>
+                {% if client[10] == 1 %}
+                    <span class="badge badge-premium">Premium</span>
+                {% else %}
+                    <span class="badge badge-normal">Normal</span>
+                {% endif %}
+                <form method="post" action="/toggle_premium">
+                    <input type="hidden" name="client_id" value="{{ client[0] }}">
+                    <button class="premium-btn" type="submit">Toggle</button>
+                </form>
+            </td>
+            <td>
+                <form method="post" action="/toggle_block">
+                    <input type="hidden" name="client_id" value="{{ client[0] }}">
+                    <button class="block-btn" type="submit">Block / Unblock</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+
+<script>
+    const ctx = document.getElementById('growthChart').getContext('2d');
+    const chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: {{ months|safe }},
+            datasets: [{
+                label: 'New Clients',
+                data: {{ monthly_registrations|safe }},
+                backgroundColor: '#c9a227'
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true } }
+        }
+    });
+</script>
+
+</body>
+</html>

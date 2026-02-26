@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Client Dashboard | Kali Works V3</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body { font-family: Arial, sans-serif; background:#f8f9fa; margin:0; padding:0; }
+        header { background:#007BFF; color:white; padding:20px; text-align:center; }
+        .content { margin:20px auto; width:80%; text-align:center; }
+        .card { background:white; padding:20px; margin:20px 0; border-radius:10px; box-shadow:0 2px 5px rgba(0,0,0,0.1); }
+        .btn { padding:10px 20px; background:#28a745; color:white; border:none; border-radius:5px; cursor:pointer; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Welcome, {{ fname }} {{ lname }}</h1>
+        <a href="/client_logout" style="color:white;">Logout</a>
+    </header>
+
+    <div class="content">
+        <div class="card">
+            <h2>Account Number</h2>
+            <p>{{ account_number or "Pending approval" }}</p>
+        </div>
+
+        <div class="card">
+            <h2>Premium Status</h2>
+            <p>{{ "Enabled" if premium_enabled else "Disabled" }}</p>
+        </div>
+
+        <div class="card">
+            <h2>Dashboard Actions</h2>
+            {% if account_number %}
+                <button class="btn" disabled>Feature Placeholder</button>
+                <p>More features coming soon.</p>
+            {% else %}
+                <p>Waiting for admin approval...</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

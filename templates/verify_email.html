@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Email Verification | Kali Works V3</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body { font-family: Arial, sans-serif; background:#f2f2f2; text-align:center; padding-top:100px; }
+        .card { background:white; display:inline-block; padding:30px; border-radius:10px; box-shadow:0 2px 5px rgba(0,0,0,0.2); }
+        .btn { padding:10px 20px; background:#28a745; color:white; border:none; border-radius:5px; cursor:pointer; margin-top:15px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        {% if verified %}
+            <h2>Email Verified Successfully!</h2>
+            <p>Wait for admin approval. Once approved, you'll receive your unique account number.</p>
+            <a href="/"><button class="btn">Go Home</button></a>
+        {% else %}
+            <h2>Verify Your Email</h2>
+            <p>Click the button below to verify your email.</p>
+            <form method="post" action="/verify_email/{{ token }}">
+                <button type="submit" class="btn">Verify Email</button>
+            </form>
+        {% endif %}
+    </div>
+</body>
+</html>

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kali Works</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        /* Premium executive palette */
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(to right, #0f2027, #203a43, #2c5364);
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        header {
+            display: flex;
+            justify-content: flex-end;
+            padding: 20px 40px;
+        }
+        header a {
+            text-decoration: none;
+            color: #ffd700; /* premium gold accent */
+            margin-left: 20px;
+            font-weight: bold;
+            font-size: 1.1em;
+            transition: color 0.3s;
+        }
+        header a:hover {
+            color: #ffa500;
+        }
+        main {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+        main h1 {
+            font-size: 3em;
+            margin-bottom: 0.2em;
+        }
+        main p {
+            font-size: 1.3em;
+            margin-bottom: 1.5em;
+        }
+        .cta-buttons {
+            display: flex;
+            gap: 20px;
+        }
+        .cta-buttons a {
+            text-decoration: none;
+            background: #ffd700;
+            color: #000;
+            padding: 15px 30px;
+            font-weight: bold;
+            border-radius: 10px;
+            transition: background 0.3s, transform 0.2s;
+        }
+        .cta-buttons a:hover {
+            background: #ffa500;
+            transform: scale(1.05);
+        }
+
+        /* Contact bubble bottom-left */
+        #contact-bubble {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 1000;
+        }
+        #contact-bubble button {
+            background: #ffd700;
+            border: none;
+            padding: 12px 18px;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        #contact-bubble button:hover {
+            background: #ffa500;
+        }
+        #contact-menu {
+            display: none;
+            margin-top: 10px;
+            background: rgba(0,0,0,0.85);
+            padding: 10px;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        #contact-menu a {
+            color: #ffd700;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        #contact-menu a:hover {
+            color: #ffa500;
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            main h1 {
+                font-size: 2em;
+            }
+            main p {
+                font-size: 1em;
+            }
+            .cta-buttons {
+                flex-direction: column;
+            }
+            .cta-buttons a {
+                width: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <a href="/admin_login_page">Admin Login</a>
+</header>
+
+<main>
+    <h1>Welcome to Kali Works</h1>
+    <p>Manage Your Finances Smartly.</p>
+    <div class="cta-buttons">
+        <a href="/register_page">Register</a>
+        <a href="/login_page">Client Login</a>
+    </div>
+</main>
+
+<div id="contact-bubble">
+    <button onclick="toggleContactMenu()">Contact Us</button>
+    <div id="contact-menu">
+        <a href="mailto:kaliworks61@gmail.com">Email</a>
+        <a href="tel:+254746951739">Phone</a>
+        <a href="https://wa.me/254746951739" target="_blank">WhatsApp</a>
+    </div>
+</div>
+
+<script>
+function toggleContactMenu() {
+    const menu = document.getElementById("contact-menu");
+    menu.style.display = (menu.style.display === "flex") ? "none" : "flex";
+}
+</script>
+
+</body>
+</html>

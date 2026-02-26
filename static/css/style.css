@@ -1,0 +1,90 @@
+body {
+    margin: 0;
+    font-family: 'Segoe UI', sans-serif;
+    background-color: #0f172a;
+    color: #f1f5f9;
+}
+
+.sidebar {
+    width: 240px;
+    height: 100vh;
+    background-color: #1e293b;
+    position: fixed;
+    padding: 20px;
+}
+
+.sidebar h2 {
+    color: #2563eb;
+    margin-bottom: 30px;
+}
+
+.sidebar a {
+    display: block;
+    color: #cbd5e1;
+    text-decoration: none;
+    margin-bottom: 15px;
+}
+
+.sidebar a:hover {
+    color: white;
+}
+
+.main {
+    margin-left: 260px;
+    padding: 30px;
+}
+
+.card {
+    background-color: #1e293b;
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+}
+
+.metric {
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.badge {
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+}
+
+.badge-success { background-color: #22c55e; }
+.badge-warning { background-color: #f59e0b; }
+.badge-danger  { background-color: #ef4444; }
+.badge-primary { background-color: #2563eb; }
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    padding: 12px;
+    text-align: left;
+}
+
+th {
+    background-color: #0f172a;
+}
+
+tr:nth-child(even) {
+    background-color: #1e293b;
+}
+
+button {
+    background-color: #2563eb;
+    border: none;
+    padding: 8px 12px;
+    color: white;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #1d4ed8;
+}

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Email - Kali Works</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+    <header>
+        <h1>Email Verification</h1>
+        <p>Welcome to Kali Works! Click the button below to verify your email.</p>
+    </header>
+
+    <form action="/confirm_email" method="post">
+        <input type="hidden" name="email" value="{{ email }}">
+        <button type="submit" class="btn">Verify Email</button>
+    </form>
+
+    <p><a href="/">Back to Home</a></p>
+</body>
+</html>
