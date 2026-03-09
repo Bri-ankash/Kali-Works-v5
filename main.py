@@ -22,11 +22,23 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import os
+
+# Ensure folder exists
+os.makedirs("data/uploads", exist_ok=True)
+
+# Update database path
+DB_PATH = 'data/kaliworks_backup.db'
+
+# Update upload folder path
+UPLOAD_FOLDER = 'data/uploads'
+
+
 # ------------------------
 # CONFIG
 # ------------------------
 BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "kaliworks.db"
+DB_PATH = 'data/kaliworks_backup.db'
 UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 

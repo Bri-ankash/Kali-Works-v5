@@ -5,6 +5,18 @@ from datetime import datetime
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "kaliworks.db"
 
+import os
+
+# Ensure folder exists
+os.makedirs("data/uploads", exist_ok=True)
+
+# Update database path
+DB_PATH = os.path.join("data", "kaliworks_backup.db")
+
+# Update upload folder path
+UPLOAD_FOLDER = os.path.join("data/uploads")
+
+
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
