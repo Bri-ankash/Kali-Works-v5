@@ -124,6 +124,11 @@ body{background:var(--bg);color:var(--white);font-family:'Segoe UI',sans-serif;m
     {% endif %}
     <button class="tab" onclick="showTab('budget')">💵 Budget</button>
     <button class="tab" onclick="showTab('invoices')">🧾 Invoices</button>
+    <button class="tab" onclick="showTab('networth')">💎 Net Worth</button>
+    <button class="tab" onclick="showTab('cashflow')">📉 Cash Flow</button>
+    <button class="tab" onclick="showTab('customers')">👤 Customers</button>
+    <button class="tab" onclick="showTab('loans')">🏦 Loans</button>
+    <button class="tab" onclick="showTab('kpis')">📊 KPIs</button>
     <button class="tab" onclick="showTab('settings')">⚙️ Settings</button>
   </div>
 
@@ -738,6 +743,174 @@ body{background:var(--bg);color:var(--white);font-family:'Segoe UI',sans-serif;m
         {% endif %}
       </div>
     </div>
+  </div>
+
+
+  <div id="tab-networth" class="tab-content">
+    <div class="grid-2">
+      <div class="card"><div class="card-top"></div>
+        <div class="section-title">💎 Update Net Worth</div>
+        <form action="/add_net_worth" method="post">
+          <input type="hidden" name="client_id" value="{{ client.id }}"/>
+          <div class="form-group"><label>Total Assets (KES)</label>
+          <input class="form-input" type="number" name="assets" placeholder="500000" required/></div>
+          <div class="form-group"><label>Total Liabilities (KES)</label>
+          <input class="form-input" type="number" name="liabilities" placeholder="150000" required/></div>
+          <button type="submit" class="btn btn-primary" style="width:100%">Calculate</button>
+        </form>
+      </div>
+      <div class="card"><div class="card-top"></div>
+        <div class="section-title">💎 Net Worth</div>
+        {% if net_worth %}{% set nw = net_worth[0].assets - net_worth[0].liabilities %}
+        <div style="text-align:center;padding:20px">
+          <div style="font-size:40px;font-weight:800;color:{% if nw >= 0 %}var(--green){% else %}var(--red){% endif %}">KES {{ "{:,.0f}".format(nw) }}</div>
+          <div style="color:var(--muted);font-size:13px;margin-top:8px">Assets: KES {{ "{:,.0f}".format(net_worth[0].assets) }} | Liabilities: KES {{ "{:,.0f}".format(net_worth[0].liabilities) }}</div>
+        </div>
+        {% else %}<div style="text-align:center;padding:40px;color:var(--muted)">No data yet!</div>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-cashflow" class="tab-content">
+    <div class="card"><div class="card-top"></div>
+      <div class="section-title">📉 Cash Flow Forecast</div>
+      {% if uploads %}{% set a = uploads[0].analysis %}
+      {% set avg_in = a.get("money_in",0)/30 %}{% set avg_out = a.get("money_out",0)/30 %}
+      {% set forecast = (avg_in - avg_out)*30 %}
+      <div class="grid-3" style="margin-bottom:24px">
+        <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:12px;padding:20px;text-align:center">
+          <div style="color:var(--muted);font-size:11px;text-transform:uppercase">Expected Income</div>
+          <div style="color:var(--green);font-size:24px;font-weight:800">KES {{ "{:,.0f}".format(avg_in*30) }}</div>
+        </div>
+        <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:12px;padding:20px;text-align:center">
+          <div style="color:var(--muted);font-size:11px;text-transform:uppercase">Expected Expenses</div>
+          <div style="color:var(--red);font-size:24px;font-weight:800">KES {{ "{:,.0f}".format(avg_out*30) }}</div>
+        </div>
+        <div style="background:rgba(14,165,233,0.08);border:1px solid var(--border2);border-radius:12px;padding:20px;text-align:center">
+          <div style="color:var(--muted);font-size:11px;text-transform:uppercase">Projected Net</div>
+          <div style="color:{% if forecast >= 0 %}var(--green){% else %}var(--red){% endif %};font-size:24px;font-weight:800">KES {{ "{:,.0f}".format(forecast) }}</div>
+        </div>
+      </div>
+      <div style="background:var(--card2);border-radius:12px;padding:16px">
+        {% if forecast > 0 %}<p style="color:var(--green);font-size:13px">📈 Projected net of KES {{ "{:,.0f}".format(forecast) }} this month!</p>
+        {% else %}<p style="color:var(--red);font-size:13px">⚠️ Expenses projected to exceed income by KES {{ "{:,.0f}".format(forecast|abs) }}. Cut spending!</p>{% endif %}
+      </div>
+      {% else %}<div style="text-align:center;padding:60px;color:var(--muted)">Upload a statement to see forecast!</div>{% endif %}
+    </div>
+  </div>
+
+  <div id="tab-customers" class="tab-content">
+    <div class="grid-2">
+      <div class="card"><div class="card-top"></div>
+        <div class="section-title">👤 Add Customer</div>
+        <form action="/add_customer" method="post">
+          <input type="hidden" name="client_id" value="{{ client.id }}"/>
+          <div class="form-group"><label>Name</label><input class="form-input" type="text" name="name" placeholder="Jane Wanjiku" required/></div>
+          <div class="form-group"><label>Phone</label><input class="form-input" type="tel" name="phone" placeholder="0712345678" required/></div>
+          <div class="form-group"><label>Email (optional)</label><input class="form-input" type="email" name="email" placeholder="jane@email.com"/></div>
+          <div class="form-group"><label>Amount Owed to You (KES)</label><input class="form-input" type="number" name="amount_owed" placeholder="0" value="0"/></div>
+          <div class="form-group"><label>Notes</label><input class="form-input" type="text" name="notes" placeholder="Regular customer"/></div>
+          <button type="submit" class="btn btn-primary" style="width:100%">Add Customer</button>
+        </form>
+      </div>
+      <div class="card"><div class="card-top"></div>
+        <div class="section-title">👥 Customers ({{ customers|length }})</div>
+        {% if customers %}
+          {% for cust in customers %}
+          <div style="background:var(--card2);border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid var(--border)">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <div style="font-weight:700">{{ cust.name }}</div>
+                <div style="color:var(--muted);font-size:12px">📞 {{ cust.phone }}</div>
+                {% if cust.notes %}<div style="color:var(--faint);font-size:11px">{{ cust.notes }}</div>{% endif %}
+              </div>
+              <div style="text-align:right">
+                {% if cust.amount_owed > 0 %}<div style="color:var(--yellow);font-weight:700">KES {{ "{:,.0f}".format(cust.amount_owed) }}</div>{% endif %}
+                <form action="/delete_customer" method="post">
+                  <input type="hidden" name="customer_id" value="{{ cust.id }}"/>
+                  <input type="hidden" name="client_id" value="{{ client.id }}"/>
+                  <button type="submit" class="btn btn-danger" style="padding:3px 10px;font-size:11px;margin-top:4px">🗑</button>
+                </form>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}<div style="text-align:center;padding:40px;color:var(--muted)">No customers yet!</div>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-loans" class="tab-content">
+    <div class="grid-2">
+      <div class="card"><div class="card-top"></div>
+        <div class="section-title">🏦 Add Loan</div>
+        <form action="/add_loan" method="post">
+          <input type="hidden" name="client_id" value="{{ client.id }}"/>
+          <div class="form-group"><label>Lender</label><input class="form-input" type="text" name="lender" placeholder="KCB / Fuliza / Friend" required/></div>
+          <div class="form-group"><label>Principal (KES)</label><input class="form-input" type="number" name="principal" placeholder="50000" required/></div>
+          <div class="form-group"><label>Interest Rate (% per month)</label><input class="form-input" type="number" step="0.1" name="interest_rate" placeholder="3.5" required/></div>
+          <div class="form-group"><label>Repayment Period (months)</label><input class="form-input" type="number" name="months" placeholder="12" required/></div>
+          <div class="form-group"><label>Start Date</label><input class="form-input" type="date" name="start_date" required/></div>
+          <button type="submit" class="btn btn-primary" style="width:100%">Save Loan</button>
+        </form>
+      </div>
+      <div class="card"><div class="card-top"></div>
+        <div class="section-title">💳 Loans</div>
+        {% if loans %}
+          {% for loan in loans %}
+          {% set monthly = (loan.principal*(loan.interest_rate/100)*(1+loan.interest_rate/100)**loan.months)/((1+loan.interest_rate/100)**loan.months-1) if loan.months > 0 else 0 %}
+          <div style="background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:10px">
+              <div><div style="font-weight:700">{{ loan.lender }}</div><div style="color:var(--muted);font-size:12px">{{ loan.start_date }}</div></div>
+              <form action="/delete_loan" method="post">
+                <input type="hidden" name="loan_id" value="{{ loan.id }}"/>
+                <input type="hidden" name="client_id" value="{{ client.id }}"/>
+                <button type="submit" class="btn btn-danger" style="padding:4px 10px;font-size:11px">🗑</button>
+              </form>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">
+              <div style="background:var(--card);border-radius:8px;padding:8px"><div style="color:var(--muted);font-size:10px">Principal</div><div style="font-weight:700;font-size:13px">KES {{ "{:,.0f}".format(loan.principal) }}</div></div>
+              <div style="background:var(--card);border-radius:8px;padding:8px"><div style="color:var(--muted);font-size:10px">Monthly</div><div style="color:var(--yellow);font-weight:700;font-size:13px">KES {{ "{:,.0f}".format(monthly) }}</div></div>
+              <div style="background:var(--card);border-radius:8px;padding:8px"><div style="color:var(--muted);font-size:10px">Total Repay</div><div style="color:var(--red);font-weight:700;font-size:13px">KES {{ "{:,.0f}".format(monthly*loan.months) }}</div></div>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}<div style="text-align:center;padding:40px;color:var(--muted)">No loans recorded!</div>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-kpis" class="tab-content">
+    {% if uploads %}{% set a = uploads[0].analysis %}
+    <div class="grid-4" style="margin-bottom:24px">
+      <div class="card"><div class="card-top"></div><div class="stat-icon">📅</div><div class="stat-label">Avg Daily Revenue</div><div class="stat-value blue">KES {{ "{:,.0f}".format(a.get("money_in",0)/30) }}</div></div>
+      <div class="card"><div class="card-top"></div><div class="stat-icon">💰</div><div class="stat-label">Break-Even</div><div class="stat-value yellow">KES {{ "{:,.0f}".format(a.get("money_out",0)) }}</div></div>
+      <div class="card"><div class="card-top"></div><div class="stat-icon">🎯</div><div class="stat-label">Profit Margin</div><div class="stat-value {% if a.get('profit_loss',0) >= 0 %}green{% else %}red{% endif %}">{% if a.get("money_in",0) > 0 %}{{ "{:.1f}".format(a.get("profit_loss",0)/a.get("money_in",1)*100) }}%{% else %}0%{% endif %}</div></div>
+      <div class="card"><div class="card-top"></div><div class="stat-icon">🏥</div><div class="stat-label">Health Score</div><div class="stat-value blue">{{ a.get("health_score",0) }}/100</div></div>
+    </div>
+    <div class="grid-2">
+      <div class="card"><div class="card-top"></div>
+        <div class="section-title">📊 Performance</div>
+        <div class="consumer-item"><span style="color:var(--muted)">Total Income</span><span style="color:var(--green);font-weight:700">KES {{ "{:,.0f}".format(a.get("money_in",0)) }}</span></div>
+        <div class="consumer-item"><span style="color:var(--muted)">Total Expenses</span><span style="color:var(--red);font-weight:700">KES {{ "{:,.0f}".format(a.get("money_out",0)) }}</span></div>
+        <div class="consumer-item"><span style="color:var(--muted)">Net Profit/Loss</span><span style="color:{% if a.get('profit_loss',0) >= 0 %}var(--green){% else %}var(--red){% endif %};font-weight:700">KES {{ "{:,.0f}".format(a.get("profit_loss",0)) }}</span></div>
+        <div class="consumer-item"><span style="color:var(--muted)">Tax Estimate</span><span style="color:var(--yellow);font-weight:700">KES {{ "{:,.0f}".format(a.get("tax_estimate",0)) }}</span></div>
+        <div class="consumer-item"><span style="color:var(--muted)">Money Leaks</span><span style="color:var(--red);font-weight:700">{{ a.get("money_leaks",[])|length }} detected</span></div>
+      </div>
+      <div class="card"><div class="card-top"></div>
+        <div class="section-title">🔄 Break-Even Status</div>
+        <div style="text-align:center;background:var(--card2);border-radius:12px;padding:24px;margin-bottom:16px">
+          <div style="font-size:32px;font-weight:800;color:var(--yellow)">KES {{ "{:,.0f}".format(a.get("money_out",0)) }}</div>
+          <div style="color:var(--muted);font-size:13px;margin-top:6px">needed to break even</div>
+        </div>
+        <div style="background:{% if a.get('money_in',0) >= a.get('money_out',0) %}rgba(34,197,94,0.08){% else %}rgba(239,68,68,0.08){% endif %};border-radius:8px;padding:12px;text-align:center">
+          <p style="font-size:13px;color:{% if a.get('money_in',0) >= a.get('money_out',0) %}var(--green){% else %}var(--red){% endif %}">
+            {% if a.get('money_in',0) >= a.get('money_out',0) %}✅ Above break-even by KES {{ "{:,.0f}".format(a.get("money_in",0)-a.get("money_out",0)) }}{% else %}⚠️ Below break-even by KES {{ "{:,.0f}".format(a.get("money_out",0)-a.get("money_in",0)) }}{% endif %}
+          </p>
+        </div>
+      </div>
+    </div>
+    {% else %}<div style="text-align:center;padding:60px;color:var(--muted)">Upload a statement to see KPIs!</div>{% endif %}
   </div>
 
   <!-- SETTINGS TAB -->

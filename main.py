@@ -311,6 +311,15 @@ def client_dashboard(request: Request, client_id: int):
     # Invoices
     c.execute("SELECT * FROM invoices WHERE client_id=? ORDER BY created_at DESC", (client_id,))
     invoices = [dict(r) for r in c.fetchall()]
+    # Net Worth
+    c.execute("SELECT * FROM net_worth WHERE client_id=? ORDER BY recorded_at DESC LIMIT 6", (client_id,))
+    net_worth_data = [dict(r) for r in c.fetchall()]
+    # Customers
+    c.execute("SELECT * FROM customers WHERE client_id=? ORDER BY created_at DESC", (client_id,))
+    customers = [dict(r) for r in c.fetchall()]
+    # Loans
+    c.execute("SELECT * FROM loans WHERE client_id=? ORDER BY created_at DESC", (client_id,))
+    loans = [dict(r) for r in c.fetchall()]
     conn.close()
     return templates.TemplateResponse("client_dashboard.html", {
         "request": request,
@@ -322,6 +331,9 @@ def client_dashboard(request: Request, client_id: int):
         "float_data": float_data,
         "budgets": budgets,
         "invoices": invoices,
+        "net_worth": net_worth_data,
+        "customers": customers,
+        "loans": loans,
         "upload_count": len(uploads),
         "max_uploads": 100 if client['premium'] else 5
     })
@@ -691,6 +703,59 @@ def delete_invoice(invoice_id: int=Form(...), client_id: int=Form(...)):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("DELETE FROM invoices WHERE id=? AND client_id=?", (invoice_id, client_id))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
+
+# ─── NET WORTH ────────────────────────────────────
+@app.post("/add_net_worth")
+def add_net_worth(client_id: int=Form(...), assets: float=Form(...), liabilities: float=Form(...)):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO net_worth (client_id,assets,liabilities) VALUES (?,?,?)",
+              (client_id, assets, liabilities))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
+
+# ─── CUSTOMERS ────────────────────────────────────
+@app.post("/add_customer")
+def add_customer(client_id: int=Form(...), name: str=Form(...), phone: str=Form(...),
+                 email: str=Form(""), amount_owed: float=Form(0), notes: str=Form("")):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO customers (client_id,name,phone,email,amount_owed,notes) VALUES (?,?,?,?,?,?)",
+              (client_id, name, phone, email, amount_owed, notes))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
+
+@app.post("/delete_customer")
+def delete_customer(customer_id: int=Form(...), client_id: int=Form(...)):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM customers WHERE id=? AND client_id=?", (customer_id, client_id))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
+
+# ─── LOANS ────────────────────────────────────────
+@app.post("/add_loan")
+def add_loan(client_id: int=Form(...), lender: str=Form(...), principal: float=Form(...),
+             interest_rate: float=Form(...), months: int=Form(...), start_date: str=Form(...)):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO loans (client_id,lender,principal,interest_rate,months,start_date) VALUES (?,?,?,?,?,?)",
+              (client_id, lender, principal, interest_rate, months, start_date))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
+
+@app.post("/delete_loan")
+def delete_loan(loan_id: int=Form(...), client_id: int=Form(...)):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM loans WHERE id=? AND client_id=?", (loan_id, client_id))
     conn.commit()
     conn.close()
     return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
