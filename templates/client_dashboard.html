@@ -1,1 +1,768 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Client Dashboard | Smart Pochi</title><link rel="stylesheet" href="/static/style.css"><style>  body { font-family: Arial, sans-serif; background:#f8f9fa; margin:0; padding:0; }  header { background:#007BFF; color:white; padding:20px; text-align:center; }  .content { margin:20px auto; width:80%; text-align:center; }  .card { background:white; padding:20px; margin:20px 0; border-radius:10px; box-shadow:0 2px 5px rgba(0,0,0,0.1); }  .btn { padding:10px 20px; background:#28a745; color:white; border:none; border-radius:5px; cursor:pointer; }    /* Panda Assistant */  #panda-assistant { position: fixed; bottom: 20px; left: 20px; z-index: 1000; font-family: Arial, sans-serif; }  #panda-icon { cursor: pointer; font-size: 2em; }  #panda-chat { display: flex; flex-direction: column; width: 250px; height: 300px; background: #f1f5f9; border-radius: 10px; padding: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }  #panda-chat.hidden { display: none; }  #panda-messages { flex: 1; overflow-y: auto; margin-bottom: 5px; }  #panda-input { padding: 5px; border-radius: 5px; border: 1px solid #ccc; }  /* Premium tip style */  .premium-tip { color: #c9a227; font-weight: bold; }  /* CSV Table */  table { width:100%; border-collapse: collapse; margin-top:10px; }  th, td { border:1px solid #ccc; padding:10px; text-align:left; }  th { background:#007BFF; color:white; }</style></head><body><header>  <h1>Welcome, {{ fname }} {{ lname }}</h1>  <a href="/client_logout" style="color:white;">Logout</a></header><div class="content">  <!-- Account Info -->  <div class="card">    <h2>Account Number</h2>    <p>{{ account_number or "Pending approval" }}</p>  </div>  <div class="card">    <h2>Premium Status</h2>    <p>{{ "Enabled" if premium else "Disabled" }}</p>  </div>  <!-- Dashboard Actions -->  <div class="card">    <h2>Dashboard Actions</h2>    {% if account_number %}      <button class="btn" disabled>Feature Placeholder</button>      <p>More features coming soon.</p>      {% if premium %}        <p class="premium-tip">Premium analytics unlocked!</p>      {% endif %}    {% else %}      <p>Waiting for admin approval...</p>    {% endif %}  </div>  {% if account_number %}  <!-- CSV Upload -->  <div class="card">    <h2>Upload Mpesa CSV</h2>    <form action="/upload_csv" method="post" enctype="multipart/form-data">      <input type="hidden" name="client_id" value="{{ client_id }}">      <input type="file" name="file" required>      <button class="btn" type="submit">Upload</button>    </form>  </div>  <!-- Uploaded CSVs & Analysis -->  {% for file, analysis, uploaded_at in uploads %}  <div class="card">    <h3>File: {{ file }}</h3>    <p>Uploaded: {{ uploaded_at }}</p>    {% set data = eval(analysis) %}    <ul>      <li>Money In: KES {{ data.money_in }}</li>      <li>Money Out: KES {{ data.money_out }}</li>      <li>Profit/Loss: KES {{ data.profit_loss }}</li>      <li>Top Consumers:        <ul>          {% for name, amt in data.top_consumers.items() %}            <li>{{ name }}: KES {{ amt }}</li>          {% endfor %}        </ul>      </li>      <li>Money Leaks:        <ul>          {% for leak in data.money_leaks %}            <li>{{ leak.desc }}: KES {{ leak.amt }}</li>          {% endfor %}        </ul>      </li>    </ul>  </div>  {% endfor %}  {% endif %}</div><!-- Panda Assistant --><div id="panda-assistant">  <div id="panda-icon">🐼</div>  <div id="panda-chat" class="hidden">    <div id="panda-messages"></div>    <input type="text" id="panda-input" placeholder="Ask me something..." />  </div></div><script>const pandaIcon = document.getElementById('panda-icon');const pandaChat = document.getElementById('panda-chat');const pandaMessages = document.getElementById('panda-messages');const pandaInput = document.getElementById('panda-input');pandaIcon.addEventListener('click', () => pandaChat.classList.toggle('hidden'));pandaInput.addEventListener('keydown', function(e) {  if(e.key === 'Enter') {    const msg = pandaInput.value.trim();    if(msg === '') return;    const reply = getPandaReply(msg);    pandaMessages.innerHTML += `<div><b>You:</b> ${msg}</div><div><b>Panda:</b> ${reply}</div>`;    pandaMessages.scrollTop = pandaMessages.scrollHeight;    pandaInput.value = '';  }});function getPandaReply(msg) {    msg = msg.toLowerCase();    if(msg.includes('upload')) return 'Go to the upload section to add your Mpesa CSV files.';    if(msg.includes('account')) return 'Your account details are visible on the dashboard.';    if(msg.includes('premium')) return premium ? 'As a premium user, you have access to advanced analytics!' : 'Upgrade to premium to unlock advanced features.';    if(msg.includes('report') || msg.includes('analysis')) return 'View your CSV reports here for insights.';    return 'I am your Panda assistant! Ask me about using Smart Pochi.';}</script></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Smart Pochi Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#030608;--card:#0a1220;--card2:#0e1928;--blue:#0ea5e9;--blue2:#38bdf8;--white:#e8f4ff;--muted:#7a99bb;--faint:#3a5270;--border:rgba(14,165,233,0.12);--border2:rgba(14,165,233,0.28);--green:#22c55e;--red:#ef4444;--yellow:#f59e0b}
+body{background:var(--bg);color:var(--white);font-family:'Segoe UI',sans-serif;min-height:100vh}
+.navbar{position:sticky;top:0;z-index:100;background:rgba(3,6,8,0.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between}
+.logo{font-size:20px;font-weight:800;color:var(--white)}
+.logo span{color:var(--blue)}
+.badge{padding:4px 12px;border-radius:100px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.badge-premium{background:linear-gradient(135deg,#f59e0b,#d97706);color:#000}
+.badge-normal{background:rgba(14,165,233,0.15);color:var(--blue2);border:1px solid var(--border2)}
+.nav-right{display:flex;align-items:center;gap:12px}
+.btn-logout{background:transparent;border:1px solid var(--border);color:var(--muted);padding:7px 16px;border-radius:8px;text-decoration:none;font-size:13px}
+.main{padding:24px;max-width:1400px;margin:0 auto}
+.welcome{margin-bottom:24px}
+.welcome h1{font-size:clamp(20px,4vw,28px);font-weight:800;letter-spacing:-0.5px}
+.welcome p{color:var(--muted);font-size:14px;margin-top:4px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px;border-bottom:1px solid var(--border);padding-bottom:16px}
+.tab{padding:8px 18px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:600;transition:all 0.2s;background:transparent;color:var(--muted)}
+.tab.active{background:var(--blue);color:#000}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;position:relative;overflow:hidden}
+.card-top{position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--blue),transparent)}
+.stat-icon{font-size:28px;margin-bottom:8px}
+.stat-label{color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
+.stat-value{font-size:28px;font-weight:800;letter-spacing:-1px;color:var(--white)}
+.stat-value.green{color:var(--green)}
+.stat-value.red{color:var(--red)}
+.stat-value.blue{color:var(--blue)}
+.section-title{font-size:16px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.upload-zone{border:2px dashed var(--border2);border-radius:12px;padding:32px;text-align:center;transition:all 0.3s;cursor:pointer}
+.upload-zone:hover{border-color:var(--blue);background:rgba(14,165,233,0.04)}
+.btn{padding:10px 20px;border-radius:8px;border:none;cursor:pointer;font-weight:600;font-size:13px;transition:all 0.2s}
+.btn-primary{background:var(--blue);color:#000}
+.btn-secondary{background:transparent;border:1px solid var(--border2);color:var(--blue2)}
+.btn-danger{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:var(--red)}
+.btn-success{background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);color:var(--green)}
+.record-card{background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px}
+.record-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+.record-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.record-stat{text-align:center;background:var(--card);border-radius:8px;padding:10px}
+.record-stat-label{font-size:10px;color:var(--muted);text-transform:uppercase}
+.record-stat-value{font-size:15px;font-weight:700;margin-top:2px}
+.premium-lock{background:linear-gradient(135deg,rgba(245,158,11,0.08),rgba(245,158,11,0.04));border:1px solid rgba(245,158,11,0.2);border-radius:16px;padding:32px;text-align:center}
+.premium-lock h3{color:#f59e0b;font-size:18px;margin-bottom:8px}
+.health-circle{width:120px;height:120px;border-radius:50%;background:conic-gradient(var(--blue) var(--score), var(--card) 0);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;position:relative}
+.health-inner{width:90px;height:90px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;color:var(--blue)}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;color:var(--muted);font-size:12px;font-weight:600;margin-bottom:6px}
+.form-input{width:100%;background:#1e293b;border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--white);font-size:14px;outline:none}
+.form-input:focus{border-color:var(--blue)}
+.goal-bar{background:var(--border);border-radius:100px;height:8px;margin-top:8px;overflow:hidden}
+.goal-progress{height:100%;background:linear-gradient(90deg,var(--blue),var(--blue2));border-radius:100px;transition:width 0.5s}
+.table{width:100%;border-collapse:collapse}
+.table th{background:var(--card2);color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;padding:10px 12px;text-align:left}
+.table td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px}
+.leak-item{background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.consumer-item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)}
+.alert{padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:13px}
+.alert-success{background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);color:var(--green)}
+.alert-error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:var(--red)}
+#panda-btn{position:fixed;bottom:24px;left:24px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#0ea5e9,#0284c7);border:none;font-size:26px;cursor:pointer;box-shadow:0 4px 20px rgba(14,165,233,0.4);z-index:999;transition:transform 0.2s}
+#panda-btn:hover{transform:scale(1.1)}
+#panda-window{position:fixed;bottom:96px;left:24px;width:300px;background:#0f172a;border:1px solid var(--border2);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);z-index:999;display:none;flex-direction:column}
+#panda-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+#panda-messages{height:220px;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+.msg-panda{background:var(--card2);border-radius:0 10px 10px 10px;padding:8px 12px;font-size:13px;color:var(--white);max-width:85%;align-self:flex-start}
+.msg-user{background:var(--blue);border-radius:10px 0 10px 10px;padding:8px 12px;font-size:13px;color:#000;max-width:85%;align-self:flex-end}
+#panda-input-row{display:flex;gap:8px;padding:10px}
+#panda-input{flex:1;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--white);font-size:13px;outline:none}
+#panda-send{background:var(--blue);border:none;border-radius:8px;padding:8px 14px;color:#000;cursor:pointer;font-weight:700}
+@media(max-width:768px){.grid-4{grid-template-columns:1fr 1fr!important}.grid-3{grid-template-columns:1fr!important}.grid-2{grid-template-columns:1fr!important}.main{padding:16px}}
+@media(max-width:480px){.grid-4{grid-template-columns:1fr!important}}
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="logo">🐼 Smart<span>Pochi</span></div>
+  <div class="nav-right">
+    <span class="badge {% if client.premium %}badge-premium{% else %}badge-normal{% endif %}">
+      {% if client.premium %}⭐ Premium{% else %}Normal Plan{% endif %}
+    </span>
+    <span style="color:var(--muted);font-size:13px">{{ client.fname }}</span>
+    <a href="/client_logout" class="btn-logout">Logout</a>
+  </div>
+</nav>
+
+<div class="main">
+  {% if request.query_params.get('error') %}
+  <div class="alert alert-error">⚠️ {{ request.query_params.get('error') }}</div>
+  {% endif %}
+  {% if request.query_params.get('success') %}
+  <div class="alert alert-success">✅ {{ request.query_params.get('success') }}</div>
+  {% endif %}
+
+  <div class="welcome">
+    <h1>Good day, {{ client.fname }} {{ client.lname }}! 👋</h1>
+    <p>Account: <strong style="color:var(--blue)">{{ client.account_number }}</strong> · 
+    {% if client.premium %}Premium Plan · Unlimited uploads{% else %}Normal Plan · {{ upload_count }}/{{ max_uploads }} uploads used{% endif %}</p>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('overview')">📊 Overview</button>
+    <button class="tab" onclick="showTab('upload')">📤 Upload</button>
+    <button class="tab" onclick="showTab('records')">📁 Records</button>
+    <button class="tab" onclick="showTab('goals')">🎯 Goals</button>
+    {% if client.premium %}
+    <button class="tab" onclick="showTab('analytics')">📈 Analytics</button>
+    <button class="tab" onclick="showTab('suppliers')">🏭 Suppliers</button>
+    <button class="tab" onclick="showTab('salaries')">👥 Salaries</button>
+    <button class="tab" onclick="showTab('float')">💧 Float</button>
+    {% endif %}
+    <button class="tab" onclick="showTab('settings')">⚙️ Settings</button>
+  </div>
+
+  <!-- OVERVIEW TAB -->
+  <div id="tab-overview" class="tab-content active">
+    {% if uploads %}
+    {% set latest = uploads[0] %}
+    {% set a = latest.analysis %}
+    <div class="grid-4">
+      <div class="card">
+        <div class="card-top"></div>
+        <div class="stat-icon">💚</div>
+        <div class="stat-label">Money In</div>
+        <div class="stat-value green">KES {{ "{:,.0f}".format(a.get('money_in',0)) }}</div>
+      </div>
+      <div class="card">
+        <div class="card-top"></div>
+        <div class="stat-icon">🔴</div>
+        <div class="stat-label">Money Out</div>
+        <div class="stat-value red">KES {{ "{:,.0f}".format(a.get('money_out',0)) }}</div>
+      </div>
+      <div class="card">
+        <div class="card-top"></div>
+        <div class="stat-icon">💰</div>
+        <div class="stat-label">Profit / Loss</div>
+        <div class="stat-value {% if a.get('profit_loss',0) >= 0 %}green{% else %}red{% endif %}">
+          KES {{ "{:,.0f}".format(a.get('profit_loss',0)) }}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-top"></div>
+        <div class="stat-icon">📊</div>
+        <div class="stat-label">Transactions</div>
+        <div class="stat-value blue">{{ a.get('transactions',[])|length }}</div>
+      </div>
+    </div>
+
+    <!-- Top Consumers & Biggest Transactions -->
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-top"></div>
+        <div class="section-title">👥 Top Fund Consumers</div>
+        {% if a.get('top_consumers') %}
+          {% for name, amt in a.get('top_consumers',{}).items() %}
+          <div class="consumer-item">
+            <span style="font-size:13px">{{ name }}</span>
+            <span style="color:var(--blue);font-weight:700">KES {{ "{:,.0f}".format(amt) }}</span>
+          </div>
+          {% endfor %}
+        {% else %}
+          <p style="color:var(--muted);font-size:13px">No consumer data found</p>
+        {% endif %}
+      </div>
+
+      <div class="card">
+        <div class="card-top"></div>
+        <div class="section-title">📅 Recent Transactions</div>
+        {% if a.get('transactions') %}
+          {% for t in a.get('transactions',[])[:8] %}
+          <div class="consumer-item">
+            <span style="font-size:12px;color:var(--muted)">{{ t.get('desc','')[:30] }}</span>
+            <span style="font-weight:700;color:{% if t.get('amount',0) > 0 %}var(--green){% else %}var(--red){% endif %}">
+              KES {{ "{:,.0f}".format(t.get('amount',0)|abs) }}
+            </span>
+          </div>
+          {% endfor %}
+        {% else %}
+          <p style="color:var(--muted);font-size:13px">Upload a statement to see transactions</p>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if client.premium %}
+    <!-- PREMIUM OVERVIEW EXTRAS -->
+    <div class="grid-3">
+      <!-- Health Score -->
+      <div class="card" style="text-align:center">
+        <div class="card-top"></div>
+        <div class="section-title" style="justify-content:center">🏥 Business Health Score</div>
+        <div class="health-circle" style="--score:{{ a.get('health_score',0) }}%">
+          <div class="health-inner">{{ a.get('health_score',0) }}</div>
+        </div>
+        <p style="color:var(--muted);font-size:12px">
+          {% if a.get('health_score',0) >= 80 %}Excellent! Keep it up! 🌟
+          {% elif a.get('health_score',0) >= 60 %}Good — room to improve 👍
+          {% elif a.get('health_score',0) >= 40 %}Fair — watch your spending ⚠️
+          {% else %}Needs attention — review expenses 🚨{% endif %}
+        </p>
+      </div>
+
+      <!-- Tax Estimate -->
+      <div class="card">
+        <div class="card-top"></div>
+        <div class="section-title">🧾 KRA Tax Estimate</div>
+        <div style="font-size:28px;font-weight:800;color:var(--yellow);letter-spacing:-1px;margin-bottom:8px">
+          KES {{ "{:,.0f}".format(a.get('tax_estimate',0)) }}
+        </div>
+        <p style="color:var(--muted);font-size:12px;line-height:1.6">Estimated 16% VAT on total income of KES {{ "{:,.0f}".format(a.get('money_in',0)) }}. Consult a tax professional for official filing.</p>
+      </div>
+
+      <!-- Money Leaks -->
+      <div class="card">
+        <div class="card-top"></div>
+        <div class="section-title">🚨 Money Leaks Detected</div>
+        {% if a.get('money_leaks') %}
+          {% for leak in a.get('money_leaks',[]) %}
+          <div class="leak-item">
+            <span style="font-size:12px;color:var(--muted)">{{ leak.get('desc','')[:35] }}</span>
+            <span style="color:var(--red);font-weight:700">KES {{ "{:,.0f}".format(leak.get('amt',0)) }}</span>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div style="text-align:center;padding:20px">
+            <div style="font-size:32px;margin-bottom:8px">✅</div>
+            <p style="color:var(--green);font-size:13px">No money leaks detected!</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    <!-- PREMIUM UPSELL -->
+    <div class="premium-lock">
+      <div style="font-size:48px;margin-bottom:12px">⭐</div>
+      <h3>Unlock Premium Features</h3>
+      <p style="color:var(--muted);font-size:14px;margin-bottom:16px">Get Health Score, Tax Estimates, Money Leak Detection, Charts, Supplier Tracker and more!</p>
+      <p style="color:var(--yellow);font-weight:700;font-size:18px">KES 3,500/month</p>
+      <p style="color:var(--muted);font-size:12px;margin-top:8px">Contact support to upgrade your plan</p>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div style="text-align:center;padding:60px 0">
+      <div style="font-size:64px;margin-bottom:16px">📊</div>
+      <h3 style="font-size:20px;margin-bottom:8px">No Analysis Yet</h3>
+      <p style="color:var(--muted);font-size:14px;margin-bottom:24px">Upload your M-Pesa PDF or CSV statement to see your financial overview</p>
+      <button class="btn btn-primary" onclick="showTab('upload')">📤 Upload Statement</button>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- UPLOAD TAB -->
+  <div id="tab-upload" class="tab-content">
+    <div class="card" style="max-width:600px;margin:0 auto">
+      <div class="card-top"></div>
+      <div class="section-title">📤 Upload M-Pesa Statement</div>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:24px">Upload your M-Pesa PDF or CSV statement. We'll automatically analyze your finances.</p>
+      
+      {% if not client.premium and upload_count >= max_uploads %}
+      <div class="alert alert-error">
+        You've reached your upload limit ({{ max_uploads }} uploads). Upgrade to Premium for unlimited uploads!
+      </div>
+      {% else %}
+      <form action="/upload_csv" method="post" enctype="multipart/form-data">
+        <input type="hidden" name="client_id" value="{{ client.id }}"/>
+        <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
+          <div style="font-size:48px;margin-bottom:12px">📄</div>
+          <p style="font-weight:600;margin-bottom:4px">Click to select file</p>
+          <p style="color:var(--muted);font-size:12px">PDF or CSV files only · Max 10MB</p>
+          <input type="file" id="fileInput" name="file" accept=".pdf,.csv" style="display:none" onchange="updateFileName(this)"/>
+        </div>
+        <p id="fileName" style="color:var(--blue);font-size:13px;margin:12px 0;text-align:center"></p>
+        <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px">🔍 Analyze Statement</button>
+      </form>
+      {% endif %}
+
+      <div style="margin-top:24px;padding-top:24px;border-top:1px solid var(--border)">
+        <p style="color:var(--muted);font-size:12px;line-height:1.7">
+          <strong style="color:var(--white)">How to get your M-Pesa statement:</strong><br>
+          1. Open M-Pesa app → My Account → M-Pesa Statement<br>
+          2. Or dial *234# → My Account → Full Statement<br>
+          3. Download PDF and upload here
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- RECORDS TAB -->
+  <div id="tab-records" class="tab-content">
+    <div class="section-title">📁 Saved Analysis Records 
+      <span style="color:var(--muted);font-size:12px;font-weight:400">
+        ({{ upload_count }}/{% if client.premium %}Unlimited{% else %}{{ max_uploads }}{% endif %})
+      </span>
+    </div>
+    {% if uploads %}
+      {% for upload in uploads %}
+      {% set a = upload.analysis %}
+      <div class="record-card">
+        <div class="record-header">
+          <div>
+            <div style="font-weight:600;font-size:14px">{{ upload.filename.split('_',2)[2] if '_' in upload.filename else upload.filename }}</div>
+            <div style="color:var(--muted);font-size:12px">{{ upload.uploaded_at[:16] }}</div>
+          </div>
+          <form action="/delete_upload" method="post" style="display:inline">
+            <input type="hidden" name="upload_id" value="{{ upload.id }}"/>
+            <input type="hidden" name="client_id" value="{{ client.id }}"/>
+            <button type="submit" class="btn btn-danger" style="padding:6px 14px;font-size:12px" onclick="return confirm('Delete this record?')">🗑 Delete</button>
+          </form>
+        </div>
+        <div class="record-stats">
+          <div class="record-stat">
+            <div class="record-stat-label">Money In</div>
+            <div class="record-stat-value" style="color:var(--green)">KES {{ "{:,.0f}".format(a.get('money_in',0)) }}</div>
+          </div>
+          <div class="record-stat">
+            <div class="record-stat-label">Money Out</div>
+            <div class="record-stat-value" style="color:var(--red)">KES {{ "{:,.0f}".format(a.get('money_out',0)) }}</div>
+          </div>
+          <div class="record-stat">
+            <div class="record-stat-label">Profit/Loss</div>
+            <div class="record-stat-value" style="color:{% if a.get('profit_loss',0) >= 0 %}var(--green){% else %}var(--red){% endif %}">
+              KES {{ "{:,.0f}".format(a.get('profit_loss',0)) }}
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div style="text-align:center;padding:40px">
+        <p style="color:var(--muted)">No records yet. Upload a statement to get started!</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- GOALS TAB -->
+  <div id="tab-goals" class="tab-content">
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-top"></div>
+        <div class="section-title">🎯 Add New Goal</div>
+        <form action="/add_goal" method="post">
+          <input type="hidden" name="client_id" value="{{ client.id }}"/>
+          <div class="form-group">
+            <label>Goal Title</label>
+            <input class="form-input" type="text" name="title" placeholder="e.g. Monthly Revenue Target" required/>
+          </div>
+          <div class="form-group">
+            <label>Target Amount (KES)</label>
+            <input class="form-input" type="number" name="target_amount" placeholder="50000" required/>
+          </div>
+          <div class="form-group">
+            <label>Period</label>
+            <select class="form-input" name="period">
+              <option>Monthly</option>
+              <option>Weekly</option>
+              <option>Quarterly</option>
+              <option>Yearly</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%">Add Goal</button>
+        </form>
+      </div>
+
+      <div>
+        {% if goals %}
+          {% for goal in goals %}
+          {% set latest_in = uploads[0].analysis.get('money_in',0) if uploads else 0 %}
+          {% set progress = [((latest_in / goal.target_amount) * 100), 100]|min if goal.target_amount > 0 else 0 %}
+          <div class="card" style="margin-bottom:12px">
+            <div class="card-top"></div>
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+              <div>
+                <div style="font-weight:700;font-size:15px">{{ goal.title }}</div>
+                <div style="color:var(--muted);font-size:12px">{{ goal.period }}</div>
+              </div>
+              <form action="/delete_goal" method="post">
+                <input type="hidden" name="goal_id" value="{{ goal.id }}"/>
+                <input type="hidden" name="client_id" value="{{ client.id }}"/>
+                <button type="submit" class="btn btn-danger" style="padding:4px 10px;font-size:11px">✕</button>
+              </form>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">
+              <span style="color:var(--muted)">Target: KES {{ "{:,.0f}".format(goal.target_amount) }}</span>
+              <span style="color:var(--blue);font-weight:700">{{ "{:.0f}".format(progress) }}%</span>
+            </div>
+            <div class="goal-bar">
+              <div class="goal-progress" style="width:{{ progress }}%"></div>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div style="text-align:center;padding:40px;color:var(--muted)">
+            <div style="font-size:40px;margin-bottom:12px">🎯</div>
+            No goals set yet. Add your first goal!
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if client.premium %}
+  <!-- ANALYTICS TAB (PREMIUM) -->
+  <div id="tab-analytics" class="tab-content">
+    {% if uploads and uploads[0].analysis.get('daily_totals') %}
+    <div class="card" style="margin-bottom:24px">
+      <div class="card-top"></div>
+      <div class="section-title">📈 Income Trend (Last 30 Days)</div>
+      <canvas id="trendChart" height="80"></canvas>
+    </div>
+    {% endif %}
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-top"></div>
+        <div class="section-title">📊 Income vs Expenses</div>
+        <canvas id="compareChart" height="150"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-top"></div>
+        <div class="section-title">📉 Average Daily Spending</div>
+        {% if uploads %}
+        {% set a = uploads[0].analysis %}
+        <div style="font-size:36px;font-weight:800;color:var(--red);letter-spacing:-2px;margin:20px 0">
+          KES {{ "{:,.0f}".format(a.get('money_out',0) / 30) }}
+        </div>
+        <p style="color:var(--muted);font-size:13px">per day on average based on your latest statement</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- SUPPLIERS TAB (PREMIUM) -->
+  <div id="tab-suppliers" class="tab-content">
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-top"></div>
+        <div class="section-title">🏭 Add Supplier</div>
+        <form action="/add_supplier" method="post">
+          <input type="hidden" name="client_id" value="{{ client.id }}"/>
+          <div class="form-group">
+            <label>Supplier Name</label>
+            <input class="form-input" type="text" name="name" placeholder="e.g. Mama Mboga Supplies" required/>
+          </div>
+          <div class="form-group">
+            <label>Amount Owed (KES)</label>
+            <input class="form-input" type="number" name="amount_owed" placeholder="5000" required/>
+          </div>
+          <div class="form-group">
+            <label>Due Date</label>
+            <input class="form-input" type="date" name="due_date" required/>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%">Add Supplier</button>
+        </form>
+      </div>
+      <div>
+        {% if suppliers %}
+        <div class="section-title">Outstanding Payments</div>
+        {% set total_owed = namespace(val=0) %}
+        {% for s in suppliers %}
+        {% set total_owed.val = total_owed.val + s.amount_owed %}
+        <div class="record-card" style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div style="font-weight:700">{{ s.name }}</div>
+              <div style="color:var(--muted);font-size:12px">Due: {{ s.due_date }}</div>
+            </div>
+            <div style="text-align:right">
+              <div style="color:var(--red);font-weight:700">KES {{ "{:,.0f}".format(s.amount_owed) }}</div>
+              <form action="/delete_supplier" method="post" style="margin-top:4px">
+                <input type="hidden" name="supplier_id" value="{{ s.id }}"/>
+                <input type="hidden" name="client_id" value="{{ client.id }}"/>
+                <button type="submit" class="btn btn-danger" style="padding:3px 10px;font-size:11px">✕</button>
+              </form>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+        <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:12px;text-align:center;margin-top:12px">
+          <div style="color:var(--muted);font-size:12px">Total Owed</div>
+          <div style="color:var(--red);font-size:22px;font-weight:800">KES {{ "{:,.0f}".format(total_owed.val) }}</div>
+        </div>
+        {% else %}
+        <div style="text-align:center;padding:40px;color:var(--muted)">
+          <div style="font-size:40px;margin-bottom:12px">🏭</div>
+          No suppliers added yet.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- SALARIES TAB (PREMIUM) -->
+  <div id="tab-salaries" class="tab-content">
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-top"></div>
+        <div class="section-title">👥 Record Salary Payment</div>
+        <form action="/add_salary" method="post">
+          <input type="hidden" name="client_id" value="{{ client.id }}"/>
+          <div class="form-group">
+            <label>Staff Name</label>
+            <input class="form-input" type="text" name="staff_name" placeholder="e.g. John Kamau" required/>
+          </div>
+          <div class="form-group">
+            <label>Amount (KES)</label>
+            <input class="form-input" type="number" name="amount" placeholder="15000" required/>
+          </div>
+          <div class="form-group">
+            <label>Date Paid</label>
+            <input class="form-input" type="date" name="paid_date" required/>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%">Record Payment</button>
+        </form>
+      </div>
+      <div class="card">
+        <div class="card-top"></div>
+        <div class="section-title">💼 Salary History</div>
+        {% if salaries %}
+        <table class="table">
+          <tr><th>Staff</th><th>Amount</th><th>Date</th></tr>
+          {% for s in salaries %}
+          <tr>
+            <td>{{ s.staff_name }}</td>
+            <td style="color:var(--blue)">KES {{ "{:,.0f}".format(s.amount) }}</td>
+            <td style="color:var(--muted)">{{ s.paid_date }}</td>
+          </tr>
+          {% endfor %}
+        </table>
+        {% else %}
+        <div style="text-align:center;padding:40px;color:var(--muted)">No salary records yet.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- FLOAT TRACKER TAB (PREMIUM) -->
+  <div id="tab-float" class="tab-content">
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-top"></div>
+        <div class="section-title">💧 Update Float Level</div>
+        <form action="/update_float" method="post">
+          <input type="hidden" name="client_id" value="{{ client.id }}"/>
+          <div class="form-group">
+            <label>Current Float Amount (KES)</label>
+            <input class="form-input" type="number" name="float_amount" placeholder="50000" required/>
+          </div>
+          <div class="form-group">
+            <label>Alert Threshold (KES) — notify when float drops below</label>
+            <input class="form-input" type="number" name="alert_threshold" placeholder="5000" required/>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%">Update Float</button>
+        </form>
+      </div>
+      <div class="card">
+        <div class="card-top"></div>
+        <div class="section-title">💧 Float Status</div>
+        {% if float_data %}
+        <div style="text-align:center;padding:20px">
+          <div style="font-size:42px;font-weight:800;color:{% if float_data.float_amount > float_data.alert_threshold %}var(--green){% else %}var(--red){% endif %};letter-spacing:-2px;margin-bottom:8px">
+            KES {{ "{:,.0f}".format(float_data.float_amount) }}
+          </div>
+          <div style="color:var(--muted);font-size:13px;margin-bottom:12px">Current Float</div>
+          {% if float_data.float_amount <= float_data.alert_threshold %}
+          <div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:12px;color:var(--red);font-size:13px">
+            ⚠️ Float is below your alert threshold of KES {{ "{:,.0f}".format(float_data.alert_threshold) }}!
+          </div>
+          {% else %}
+          <div style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:8px;padding:12px;color:var(--green);font-size:13px">
+            ✅ Float is healthy — above KES {{ "{:,.0f}".format(float_data.alert_threshold) }} threshold
+          </div>
+          {% endif %}
+          <div style="color:var(--muted);font-size:11px;margin-top:12px">Last updated: {{ float_data.recorded_at[:16] }}</div>
+        </div>
+        {% else %}
+        <div style="text-align:center;padding:40px;color:var(--muted)">
+          <div style="font-size:40px;margin-bottom:12px">💧</div>
+          No float data yet. Update your float level!
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- SETTINGS TAB -->
+  <div id="tab-settings" class="tab-content">
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-top"></div>
+        <div class="section-title">🔑 Change Password</div>
+        <form action="/change_password" method="post">
+          <input type="hidden" name="client_id" value="{{ client.id }}"/>
+          <div class="form-group">
+            <label>Current Password</label>
+            <input class="form-input" type="password" name="old_password" required/>
+          </div>
+          <div class="form-group">
+            <label>New Password</label>
+            <input class="form-input" type="password" name="new_password" required/>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%">Change Password</button>
+        </form>
+      </div>
+      <div class="card">
+        <div class="card-top"></div>
+        <div class="section-title">🔐 Two-Factor Authentication</div>
+        <p style="color:var(--muted);font-size:13px;line-height:1.7;margin-bottom:20px">
+          When enabled, you'll receive a 6-digit code on your email every time you login. Adds an extra layer of security to your account.
+        </p>
+        <div style="display:flex;align-items:center;justify-content:space-between;background:var(--card2);padding:16px;border-radius:10px;margin-bottom:16px">
+          <div>
+            <div style="font-weight:600;margin-bottom:2px">2FA Status</div>
+            <div style="font-size:12px;color:{% if client.two_fa_enabled %}var(--green){% else %}var(--muted){% endif %}">
+              {% if client.two_fa_enabled %}✅ Enabled{% else %}❌ Disabled{% endif %}
+            </div>
+          </div>
+          <form action="/toggle_2fa" method="post">
+            <input type="hidden" name="client_id" value="{{ client.id }}"/>
+            <button type="submit" class="btn {% if client.two_fa_enabled %}btn-danger{% else %}btn-success{% endif %}">
+              {% if client.two_fa_enabled %}Disable 2FA{% else %}Enable 2FA{% endif %}
+            </button>
+          </form>
+        </div>
+        <div style="background:var(--card2);padding:16px;border-radius:10px">
+          <div style="font-weight:600;margin-bottom:4px">Account Info</div>
+          <div style="color:var(--muted);font-size:12px;line-height:1.8">
+            Name: {{ client.fname }} {{ client.lname }}<br>
+            Email: {{ client.email }}<br>
+            Phone: {{ client.mobile }}<br>
+            Plan: {% if client.premium %}<span style="color:var(--yellow)">⭐ Premium</span>{% else %}<span style="color:var(--blue)">Normal</span>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PANDA BOT -->
+<button id="panda-btn" onclick="togglePanda()">🐼</button>
+<div id="panda-window">
+  <div id="panda-header">
+    <span style="font-size:24px">🐼</span>
+    <div>
+      <div style="font-weight:700;font-size:14px">Panda Assistant</div>
+      <div style="color:var(--muted);font-size:11px">Ask me about your finances</div>
+    </div>
+  </div>
+  <div id="panda-messages">
+    <div class="msg-panda">🐼 Hi {{ client.fname }}! I'm Panda, your Smart Pochi assistant. Ask me anything about your finances!</div>
+  </div>
+  <div id="panda-input-row">
+    <input id="panda-input" type="text" placeholder="Ask Panda..." onkeydown="if(event.key==='Enter')sendPanda()"/>
+    <button id="panda-send" onclick="sendPanda()">➤</button>
+  </div>
+</div>
+
+<script>
+function showTab(name){
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  event.target.classList.add('active');
+}
+
+function updateFileName(input){
+  const p = document.getElementById('fileName');
+  p.textContent = input.files[0] ? '📄 '+input.files[0].name : '';
+}
+
+function togglePanda(){
+  const w = document.getElementById('panda-window');
+  w.style.display = w.style.display === 'flex' ? 'none' : 'flex';
+  w.style.flexDirection = 'column';
+}
+
+async function sendPanda(){
+  const input = document.getElementById('panda-input');
+  const msg = input.value.trim();
+  if(!msg) return;
+  addMsg(msg, 'user');
+  input.value = '';
+  try{
+    const res = await fetch('/panda_chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({message:msg, client_id:{{ client.id }}})
+    });
+    const data = await res.json();
+    addMsg(data.reply, 'panda');
+  }catch(e){ addMsg('🐼 Sorry, I had trouble connecting. Try again!', 'panda'); }
+}
+
+function addMsg(text, sender){
+  const msgs = document.getElementById('panda-messages');
+  const div = document.createElement('div');
+  div.className = sender === 'panda' ? 'msg-panda' : 'msg-user';
+  div.textContent = text;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+// Charts
+{% if client.premium and uploads %}
+{% set a = uploads[0].analysis %}
+{% if a.get('daily_totals') %}
+const trendCtx = document.getElementById('trendChart');
+if(trendCtx){
+  new Chart(trendCtx, {
+    type: 'line',
+    data: {
+      labels: {{ a.get('daily_totals',{}).keys()|list|tojson }},
+      datasets:[{
+        label:'Income',
+        data: {{ a.get('daily_totals',{}).values()|list|tojson }},
+        borderColor:'#0ea5e9',
+        backgroundColor:'rgba(14,165,233,0.1)',
+        fill:true,
+        tension:0.4
+      }]
+    },
+    options:{
+      responsive:true,
+      plugins:{legend:{labels:{color:'#7a99bb'}}},
+      scales:{
+        x:{ticks:{color:'#3a5270'},grid:{color:'rgba(14,165,233,0.05)'}},
+        y:{ticks:{color:'#3a5270'},grid:{color:'rgba(14,165,233,0.05)'}}
+      }
+    }
+  });
+}
+{% endif %}
+
+const compareCtx = document.getElementById('compareChart');
+if(compareCtx){
+  new Chart(compareCtx, {
+    type:'doughnut',
+    data:{
+      labels:['Money In','Money Out'],
+      datasets:[{
+        data:[{{ a.get('money_in',0) }},{{ a.get('money_out',0) }}],
+        backgroundColor:['rgba(34,197,94,0.7)','rgba(239,68,68,0.7)'],
+        borderColor:['#22c55e','#ef4444'],
+        borderWidth:2
+      }]
+    },
+    options:{
+      responsive:true,
+      plugins:{legend:{labels:{color:'#7a99bb'}}}
+    }
+  });
+}
+{% endif %}
+</script>
+</body>
+</html>

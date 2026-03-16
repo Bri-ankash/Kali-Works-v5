@@ -1,89 +1,80 @@
 import sqlite3
-from pathlib import Path
-from datetime import datetime
-
-BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "smartpochi.db"
-
 import os
 
-# Ensure folder exists
-os.makedirs("data/uploads", exist_ok=True)
-
-# Update database path
-DB_PATH = os.path.join("data", "smartpochi_backup.db")
-
-# Update upload folder path
-UPLOAD_FOLDER = os.path.join("data/uploads")
-
-
-def get_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+DB_PATH = 'data/smartpochi_backup.db'
+os.makedirs('data', exist_ok=True)
 
 def init_db():
-    conn = get_connection()
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
-    # Clients
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS clients (
+    # Existing tables
+    c.execute('''CREATE TABLE IF NOT EXISTS clients (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        fname TEXT,
-        lname TEXT,
-        email TEXT UNIQUE,
-        mobile TEXT,
-        password TEXT,
-        account_number TEXT UNIQUE,
-        verified INTEGER DEFAULT 0,
-        approved INTEGER DEFAULT 0,
-        premium INTEGER DEFAULT 0,
+        fname TEXT, lname TEXT, id_pass TEXT,
+        email TEXT, mobile TEXT, password TEXT,
+        account_number TEXT, verified INTEGER DEFAULT 0,
+        approved INTEGER DEFAULT 0, premium INTEGER DEFAULT 0,
         blocked INTEGER DEFAULT 0,
-        failed_attempts INTEGER DEFAULT 0,
-        locked_until TEXT,
-        created_at TEXT
-    )
-    """)
+        two_fa_enabled INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
 
-    # Email verification tokens
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS email_tokens (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email TEXT,
-        token TEXT,
-        expires_at TEXT
-    )
-    """)
+    c.execute('''CREATE TABLE IF NOT EXISTS admin_sessions (
+        token TEXT PRIMARY KEY, created_at TEXT
+    )''')
 
-    # Admin sessions
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS admin_sessions (
+    c.execute('''CREATE TABLE IF NOT EXISTS audit_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        token TEXT,
-        expires_at TEXT
-    )
-    """)
+        action TEXT, timestamp TEXT
+    )''')
 
-    # Admin 2FA codes
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS admin_2fa (
+    c.execute('''CREATE TABLE IF NOT EXISTS csv_uploads (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT,
-        code TEXT,
-        expires_at TEXT
-    )
-    """)
+        client_id INTEGER, filename TEXT,
+        uploaded_at TEXT, analysis TEXT
+    )''')
 
-    # CSV uploads
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS uploads (
+    # NEW TABLES
+    c.execute('''CREATE TABLE IF NOT EXISTS goals (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        client_id INTEGER,
-        filename TEXT,
-        uploaded_at TEXT
-    )
-    """)
+        client_id INTEGER, title TEXT,
+        target_amount REAL, current_amount REAL DEFAULT 0,
+        period TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS suppliers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id INTEGER, name TEXT,
+        amount_owed REAL DEFAULT 0,
+        due_date TEXT, status TEXT DEFAULT 'pending',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS staff_salaries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id INTEGER, staff_name TEXT,
+        amount REAL, paid_date TEXT,
+        status TEXT DEFAULT 'paid',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS float_tracker (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id INTEGER, float_amount REAL,
+        alert_threshold REAL DEFAULT 1000,
+        recorded_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS otp_codes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id INTEGER, code TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
 
     conn.commit()
     conn.close()
+
+if __name__ == '__main__':
+    init_db()
+    print('Database initialized!')

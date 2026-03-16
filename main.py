@@ -3,110 +3,55 @@
 # ================================
 
 import os
+import re
 import sqlite3
 import secrets
 import hashlib
 import smtplib
 import random
 import csv
+import json
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 from pathlib import Path
 from collections import defaultdict
 
-from fastapi import FastAPI, Request, Form, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, Request, Form, UploadFile, File, Cookie
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
 load_dotenv()
 
-import os
-
-# Ensure folder exists
 os.makedirs("data/uploads", exist_ok=True)
+os.makedirs("static", exist_ok=True)
 
-# Update database path
-DB_PATH = 'data/smartpochi_backup.db'
+from database import init_db, DB_PATH
 
-# Update upload folder path
-UPLOAD_FOLDER = 'data/uploads'
+UPLOAD_DIR = Path("data/uploads")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-
-# ------------------------
-# CONFIG
-# ------------------------
-BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = 'data/smartpochi_backup.db'
-UPLOAD_DIR = BASE_DIR / "uploads"
-UPLOAD_DIR.mkdir(exist_ok=True)
-
-app = FastAPI()
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
-
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "SmartPochi@2026")
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "kaliworks61@gmail.com")
 ADMIN_APP_PASSWORD = os.getenv("ADMIN_APP_PASSWORD")
-ADMIN_2FA_ENABLED = True  # FIXED: mandatory 2FA for admin
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 465
-SESSION_EXPIRY_MINUTES = 30
 
 admin_2fa_codes = {}
+client_2fa_codes = {}
 
-# ------------------------
-# DATABASE INIT
-# ------------------------
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("""CREATE TABLE IF NOT EXISTS clients (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        fname TEXT,
-        lname TEXT,
-        id_pass TEXT,
-        email TEXT UNIQUE,
-        mobile TEXT,
-        password TEXT,
-        account_number TEXT UNIQUE,
-        verified INTEGER DEFAULT 0,
-        approved INTEGER DEFAULT 0,
-        premium INTEGER DEFAULT 0,
-        blocked INTEGER DEFAULT 0
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS admin_sessions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        token TEXT,
-        created_at TEXT
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS audit_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        action TEXT,
-        timestamp TEXT
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS csv_uploads (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        client_id INTEGER,
-        filename TEXT,
-        uploaded_at TEXT,
-        analysis TEXT,
-        FOREIGN KEY(client_id) REFERENCES clients(id)
-    )""")
-    conn.commit()
-    conn.close()
+app = FastAPI(title="Smart Pochi")
+templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 init_db()
 
-# ------------------------
-# UTILITIES
-# ------------------------
-def hash_password(password: str):
-    return hashlib.sha256(password.encode()).hexdigest()
+# ─── UTILITIES ────────────────────────────────────
+def hash_password(p): return hashlib.sha256(p.encode()).hexdigest()
 
-def send_email(to_email: str, subject: str, body_html: str):
+def send_email(to_email, subject, body_html):
     try:
         msg = EmailMessage()
         msg['Subject'] = subject
@@ -117,334 +62,570 @@ def send_email(to_email: str, subject: str, body_html: str):
         with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
             server.login(ADMIN_EMAIL, ADMIN_APP_PASSWORD)
             server.send_message(msg)
-        print(f"[DEBUG] Email sent to {to_email}")
+        print(f"[EMAIL] Sent to {to_email}")
     except Exception as e:
-        print("Email error:", e)
+        print(f"[EMAIL ERROR] {e}")
 
-def log_action(action: str):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO audit_logs (action, timestamp) VALUES (?, ?)", (action, str(datetime.now())))
-    conn.commit()
-    conn.close()
-
-def create_admin_session():
-    token = secrets.token_hex(16)
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO admin_sessions (token, created_at) VALUES (?, ?)", (token, str(datetime.now())))
-    conn.commit()
-    conn.close()
-    return token
-
-def verify_admin_session(token: str):
-    if not token:
-        return False
+def verify_admin_session(token):
+    if not token: return False
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT created_at FROM admin_sessions WHERE token=?", (token,))
     row = c.fetchone()
     conn.close()
-    if not row:
-        return False
-    created_at = datetime.fromisoformat(row[0])
-    return datetime.now() - created_at < timedelta(minutes=SESSION_EXPIRY_MINUTES)
+    if not row: return False
+    created = datetime.fromisoformat(row[0])
+    return datetime.now() - created < timedelta(hours=8)
 
-# ------------------------
-# LIGHTWEIGHT CSV ANALYSIS ENGINE
-# ------------------------
-def analyze_csv(file_path: str):
-    result = {
-        "money_in": 0.0,
-        "money_out": 0.0,
-        "profit_loss": 0.0,
-        "top_consumers": {},
-        "money_leaks": []
-    }
-    consumers = defaultdict(float)
+def get_client(client_id):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("SELECT * FROM clients WHERE id=?", (client_id,))
+    row = c.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def log_action(action):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO audit_logs (action, timestamp) VALUES (?,?)", (action, str(datetime.now())))
+    conn.commit()
+    conn.close()
+
+# ─── PDF ANALYSIS ─────────────────────────────────
+def analyze_pdf_text(file_path):
+    result = {"money_in":0.0,"money_out":0.0,"profit_loss":0.0,
+              "top_consumers":{},"money_leaks":[],"transactions":[],
+              "daily_totals":{},"tax_estimate":0.0,"health_score":0}
     try:
-        with open(file_path, newline='', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                amt = float(row.get("Amount", 0))
-                desc = row.get("Description", "").lower()
-                if amt > 0:
-                    result["money_in"] += amt
-                else:
-                    result["money_out"] += abs(amt)
-                    if any(flag in desc for flag in ["bet", "gamble", "casino"]):
-                        result["money_leaks"].append({"desc": desc, "amt": abs(amt)})
-                consumer = row.get("Sender", row.get("Receiver", "Unknown"))
-                consumers[consumer] += abs(amt)
-        result["top_consumers"] = dict(sorted(consumers.items(), key=lambda x: x[1], reverse=True)[:5])
-        result["profit_loss"] = result["money_in"] - result["money_out"]
+        consumers = defaultdict(float)
+        with open(file_path, 'rb') as f:
+            content = f.read().decode('latin-1', errors='ignore')
+        lines = content.split('\n')
+        for line in lines:
+            amounts = re.findall(r'[\d,]+\.\d{2}', line)
+            for amt_str in amounts:
+                try:
+                    amt = float(amt_str.replace(',',''))
+                    if amt <= 0: continue
+                    line_lower = line.lower()
+                    if any(w in line_lower for w in ['received','deposit','credit','from','you received']):
+                        result['money_in'] += amt
+                    elif any(w in line_lower for w in ['sent','paid','withdraw','buy','payment','transfer','you sent']):
+                        result['money_out'] += amt
+                        if any(w in line_lower for w in ['bet','gambl','casino','sportpesa','betin','odibets','mcheza']):
+                            result['money_leaks'].append({'desc':line.strip()[:60],'amt':amt})
+                    name_match = re.search(r'(?:to|from)\s+([A-Z][a-z]+ [A-Z][a-z]+)', line)
+                    if name_match:
+                        consumers[name_match.group(1)] += amt
+                except: continue
+        result['top_consumers'] = dict(sorted(consumers.items(), key=lambda x:x[1], reverse=True)[:5])
+        result['profit_loss'] = result['money_in'] - result['money_out']
+        result['tax_estimate'] = round(result['money_in'] * 0.16, 2)
+        # Health score
+        score = 50
+        if result['money_in'] > result['money_out']: score += 20
+        if len(result['money_leaks']) == 0: score += 15
+        if result['profit_loss'] > 0: score += 15
+        result['health_score'] = min(100, score)
     except Exception as e:
-        print("[DEBUG] CSV analysis error:", e)
+        print(f"[PDF Error] {e}")
     return result
 
-# ------------------------
-# ROUTES: LANDING / REGISTER / LOGIN
-# ------------------------
+# ─── CSV ANALYSIS ─────────────────────────────────
+def analyze_csv(file_path):
+    result = {"money_in":0.0,"money_out":0.0,"profit_loss":0.0,
+              "top_consumers":{},"money_leaks":[],"transactions":[],
+              "daily_totals":{},"tax_estimate":0.0,"health_score":0}
+    consumers = defaultdict(float)
+    daily = defaultdict(float)
+    try:
+        with open(file_path, newline='', encoding='utf-8', errors='ignore') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    amt = float(str(row.get("Amount","0")).replace(',',''))
+                    desc = str(row.get("Description","")).lower()
+                    date = str(row.get("Date",""))[:10]
+                    if amt > 0:
+                        result['money_in'] += amt
+                        daily[date] += amt
+                    else:
+                        result['money_out'] += abs(amt)
+                        if any(f in desc for f in ['bet','gambl','casino','sportpesa','betin','odibets','mcheza']):
+                            result['money_leaks'].append({'desc':desc[:60],'amt':abs(amt)})
+                    consumer = row.get("Sender", row.get("Receiver","Unknown"))
+                    consumers[consumer] += abs(amt)
+                    result['transactions'].append({'date':date,'amount':amt,'desc':desc[:40]})
+                except: continue
+        result['top_consumers'] = dict(sorted(consumers.items(), key=lambda x:x[1], reverse=True)[:5])
+        result['daily_totals'] = dict(sorted(daily.items())[-30:])
+        result['profit_loss'] = result['money_in'] - result['money_out']
+        result['tax_estimate'] = round(result['money_in'] * 0.16, 2)
+        score = 50
+        if result['money_in'] > result['money_out']: score += 20
+        if len(result['money_leaks']) == 0: score += 15
+        if result['profit_loss'] > 0: score += 15
+        result['health_score'] = min(100, score)
+    except Exception as e:
+        print(f"[CSV Error] {e}")
+    return result
+
+# ─── LANDING ──────────────────────────────────────
 @app.get("/", response_class=HTMLResponse)
 def landing(request: Request):
     return templates.TemplateResponse("landing.html", {"request": request})
 
 @app.get("/register_page", response_class=HTMLResponse)
-def show_register_page(request: Request):
+def show_register(request: Request):
     return templates.TemplateResponse("register.html", {"request": request})
 
 @app.get("/login_page", response_class=HTMLResponse)
-def show_login_page(request: Request):
+def show_login(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
 
-@app.get("/admin_login_page", response_class=HTMLResponse)
-def show_admin_login_page(request: Request):
-    return templates.TemplateResponse("admin_login.html", {"request": request})
-
-# ------------------------
-# REGISTRATION & EMAIL VERIFICATION
-# ------------------------
+# ─── REGISTRATION ─────────────────────────────────
 @app.post("/register")
-def register(
-    request: Request,
-    fname: str = Form(...),
-    lname: str = Form(...),
-    id_pass: str = Form(...),
-    email: str = Form(...),
-    mobile: str = Form(...),
-    password: str = Form(...),
-    confirm_password: str = Form(...),
-):
+def register(request: Request, fname: str=Form(...), lname: str=Form(...),
+             id_pass: str=Form(...), email: str=Form(...), mobile: str=Form(...),
+             password: str=Form(...), confirm_password: str=Form(...)):
     if password != confirm_password:
-        return templates.TemplateResponse("register.html", {"request": request, "error": "Passwords do not match"})
+        return templates.TemplateResponse("register.html", {"request":request,"error":"Passwords do not match"})
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT id FROM clients WHERE email=?", (email,))
+    c.execute("SELECT id FROM clients WHERE email=? OR mobile=?", (email, mobile))
     if c.fetchone():
         conn.close()
-        return templates.TemplateResponse(
-            "registration_pending.html",
-            {"request": request, "message": "Already registered. Wait for admin approval."}
-        )
+        return templates.TemplateResponse("register.html", {"request":request,"error":"Email or phone already registered."})
     hashed = hash_password(password)
-    c.execute(
-        """INSERT INTO clients (fname,lname,id_pass,email,mobile,password)
-           VALUES (?,?,?,?,?,?)""",
-        (fname, lname, id_pass, email, mobile, hashed)
-    )
+    c.execute("INSERT INTO clients (fname,lname,id_pass,email,mobile,password) VALUES (?,?,?,?,?,?)",
+              (fname,lname,id_pass,email,mobile,hashed))
     conn.commit()
     conn.close()
-
-    verify_link = f"https://smart-pochi.onrender.com/confirm_email?email={email}"
-    email_html = f"""<html><body>
-      <h2>Welcome to Smart Pochi!</h2>
-      <p>Click below to confirm your email:</p>
-      <a href="{verify_link}" style="padding:10px 20px;background-color:green;color:white;text-decoration:none;">Confirm Email</a>
-    </body></html>"""
-    send_email(email, "Confirm your Smart Pochi account", email_html)
-    return templates.TemplateResponse(
-        "registration_pending.html",
-        {"request": request, "message": "Status Pending. Check your email to verify."}
-    )
+    BASE_URL = os.getenv("BASE_URL", "http://localhost:8080")
+    verify_link = f"{BASE_URL}/confirm_email?email={email}"
+    html = f"""<div style='font-family:Arial;padding:20px;background:#0a1220;color:#e8f4ff;border-radius:10px'>
+        <h2 style='color:#0ea5e9'>Welcome to Smart Pochi! 🐼</h2>
+        <p>Click below to verify your email and activate your account:</p>
+        <a href='{verify_link}' style='display:inline-block;padding:12px 24px;background:#0ea5e9;color:#000;border-radius:8px;text-decoration:none;font-weight:bold'>✅ Verify My Email</a>
+        <p style='color:#7a99bb;margin-top:16px'>If you did not register, ignore this email.</p>
+    </div>"""
+    send_email(email, "Verify your Smart Pochi account", html)
+    return templates.TemplateResponse("registration_pending.html", {"request":request,"message":"Registration successful! Check your email to verify your account."})
 
 @app.get("/confirm_email", response_class=HTMLResponse)
 def confirm_email_page(request: Request, email: str):
-    return templates.TemplateResponse("verify_page.html", {"request": request, "email": email})
+    return templates.TemplateResponse("verify_page.html", {"request":request,"email":email})
 
 @app.post("/confirm_email")
-def confirm_email(request: Request, email: str = Form(...)):
+def confirm_email(request: Request, email: str=Form(...)):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("UPDATE clients SET verified=1 WHERE email=?", (email,))
     conn.commit()
     conn.close()
-    return templates.TemplateResponse(
-        "registration_pending.html",
-        {"request": request, "message": "Email Verified ✅. Waiting for admin approval."}
-    )
+    return templates.TemplateResponse("email_verified.html", {"request":request,"message":"Email verified! ✅ Waiting for admin approval."})
 
-# ------------------------
-# CLIENT LOGIN & DASHBOARD
-# ------------------------
+# ─── CLIENT LOGIN ─────────────────────────────────
 @app.post("/client_login")
-def client_login(request: Request, account_number: str = Form(...), password: str = Form(...)):
+def client_login(request: Request, account_number: str=Form(...), password: str=Form(...)):
     hashed = hash_password(password)
     conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    c.execute(
-        "SELECT id, approved, blocked, premium FROM clients WHERE account_number=? AND password=? AND verified=1",
-        (account_number, hashed)
-    )
-    user = c.fetchone()
+    c.execute("SELECT * FROM clients WHERE account_number=? AND password=? AND verified=1", (account_number, hashed))
+    client = c.fetchone()
     conn.close()
-    if not user:
-        return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid credentials or not approved."})
-    if user[1] != 1:
-        return templates.TemplateResponse("login.html", {"request": request, "error": "Awaiting admin approval."})
-    if user[2] == 1:
-        return templates.TemplateResponse("login.html", {"request": request, "error": "Account blocked."})
-    client_id, _, _, premium = user
-    response = RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
-    response.set_cookie(key="client_id", value=str(client_id))
-    response.set_cookie(key="premium", value=str(premium))
-    return response
+    if not client:
+        return templates.TemplateResponse("login.html", {"request":request,"error":"Invalid credentials or account not verified."})
+    client = dict(client)
+    if client['blocked']:
+        return templates.TemplateResponse("login.html", {"request":request,"error":"Your account has been blocked. Contact support."})
+    if not client['approved']:
+        return templates.TemplateResponse("login.html", {"request":request,"error":"Account pending admin approval."})
+    if client['two_fa_enabled']:
+        code = str(random.randint(100000,999999))
+        client_2fa_codes[client['id']] = code
+        html = f"<p>Your Smart Pochi 2FA code is: <b style='font-size:24px'>{code}</b></p>"
+        send_email(client['email'], "Smart Pochi Login Code", html)
+        resp = RedirectResponse(f"/client_2fa/{client['id']}", status_code=303)
+        return resp
+    resp = RedirectResponse(f"/client_dashboard/{client['id']}", status_code=303)
+    resp.set_cookie("client_id", str(client['id']))
+    return resp
 
+@app.get("/client_2fa/{client_id}", response_class=HTMLResponse)
+def client_2fa_page(request: Request, client_id: int):
+    return templates.TemplateResponse("client_2fa.html", {"request":request,"client_id":client_id})
+
+@app.post("/client_2fa_verify")
+def client_2fa_verify(request: Request, client_id: int=Form(...), code: str=Form(...)):
+    if client_2fa_codes.get(client_id) == code:
+        resp = RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
+        resp.set_cookie("client_id", str(client_id))
+        return resp
+    return templates.TemplateResponse("client_2fa.html", {"request":request,"client_id":client_id,"error":"Invalid code."})
+
+# ─── CLIENT DASHBOARD ─────────────────────────────
 @app.get("/client_dashboard/{client_id}", response_class=HTMLResponse)
 def client_dashboard(request: Request, client_id: int):
+    client = get_client(client_id)
+    if not client:
+        return RedirectResponse("/login_page")
     conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    # FIXED: fetch all relevant fields
-    c.execute("SELECT fname,lname,premium,account_number FROM clients WHERE id=?", (client_id,))
-    user = c.fetchone()
+    # Get uploads (limit 5 for normal, unlimited for premium)
+    limit = 100 if client['premium'] else 5
+    c.execute("SELECT * FROM csv_uploads WHERE client_id=? ORDER BY uploaded_at DESC LIMIT ?", (client_id, limit))
+    uploads = [dict(r) for r in c.fetchall()]
+    # Parse analysis
+    for u in uploads:
+        try: u['analysis'] = eval(u['analysis'])
+        except: u['analysis'] = {}
+    # Goals
+    c.execute("SELECT * FROM goals WHERE client_id=?", (client_id,))
+    goals = [dict(r) for r in c.fetchall()]
+    # Suppliers (premium)
+    suppliers = []
+    if client['premium']:
+        c.execute("SELECT * FROM suppliers WHERE client_id=? ORDER BY due_date", (client_id,))
+        suppliers = [dict(r) for r in c.fetchall()]
+    # Staff salaries (premium)
+    salaries = []
+    if client['premium']:
+        c.execute("SELECT * FROM staff_salaries WHERE client_id=? ORDER BY paid_date DESC LIMIT 10", (client_id,))
+        salaries = [dict(r) for r in c.fetchall()]
+    # Float tracker (premium)
+    float_data = None
+    if client['premium']:
+        c.execute("SELECT * FROM float_tracker WHERE client_id=? ORDER BY recorded_at DESC LIMIT 1", (client_id,))
+        row = c.fetchone()
+        float_data = dict(row) if row else None
     conn.close()
-    if not user:
-        return RedirectResponse("/")
-    fname, lname, premium, account_number = user
-
-    # Retrieve uploaded CSVs
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute(
-        "SELECT filename, analysis, uploaded_at FROM csv_uploads WHERE client_id=? ORDER BY uploaded_at DESC",
-        (client_id,)
-    )
-    uploads = c.fetchall()
-    conn.close()
-
     return templates.TemplateResponse("client_dashboard.html", {
         "request": request,
-        "client_id": client_id,
-        "fname": fname,
-        "lname": lname,
-        "premium": premium,
-        "account_number": account_number,
+        "client": client,
         "uploads": uploads,
-        "panda_assistant_enabled": True  # FIXED: always show Panda
+        "goals": goals,
+        "suppliers": suppliers,
+        "salaries": salaries,
+        "float_data": float_data,
+        "upload_count": len(uploads),
+        "max_uploads": 100 if client['premium'] else 5
     })
 
-# ------------------------
-# CSV UPLOAD
-# ------------------------
+# ─── FILE UPLOAD ──────────────────────────────────
 @app.post("/upload_csv")
-def upload_csv(request: Request, client_id: int = Form(...), file: UploadFile = File(...)):
+def upload_csv(request: Request, client_id: int=Form(...), file: UploadFile=File(...)):
+    client = get_client(client_id)
+    if not client:
+        return RedirectResponse("/login_page")
+    # Check upload limit for normal users
+    if not client['premium']:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) FROM csv_uploads WHERE client_id=?", (client_id,))
+        count = c.fetchone()[0]
+        conn.close()
+        if count >= 5:
+            return RedirectResponse(f"/client_dashboard/{client_id}?error=Upload+limit+reached.+Upgrade+to+Premium.", status_code=303)
+    # Validate file type
+    ext = '.' + file.filename.split('.')[-1].lower()
+    if ext not in ['.csv', '.pdf']:
+        return RedirectResponse(f"/client_dashboard/{client_id}?error=Only+PDF+or+CSV+files+allowed", status_code=303)
     filename = f"{client_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.filename}"
     file_path = UPLOAD_DIR / filename
     with open(file_path, "wb") as f:
         f.write(file.file.read())
-    analysis = analyze_csv(str(file_path))
+    if ext == '.pdf':
+        analysis = analyze_pdf_text(str(file_path))
+    else:
+        analysis = analyze_csv(str(file_path))
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute(
-        "INSERT INTO csv_uploads (client_id, filename, uploaded_at, analysis) VALUES (?,?,?,?)",
-        (client_id, filename, str(datetime.now()), str(analysis))
-    )
+    c.execute("INSERT INTO csv_uploads (client_id,filename,uploaded_at,analysis) VALUES (?,?,?,?)",
+              (client_id, filename, str(datetime.now()), str(analysis)))
     conn.commit()
     conn.close()
     return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
 
-# ------------------------
-# ADMIN LOGIN & 2FA
-# ------------------------
-@app.get("/admin_login", response_class=HTMLResponse)
-def admin_login_page(request: Request):
-    return templates.TemplateResponse("admin_login.html", {"request": request})
-
-@app.post("/admin_login", response_class=HTMLResponse)
-def admin_login_post(request: Request, username: str = Form(...), password: str = Form(...)):
-    if username != ADMIN_USERNAME or password != ADMIN_PASSWORD:
-        return templates.TemplateResponse("admin_login.html", {"request": request, "error": "Invalid credentials"})
-    # FIXED: 2FA mandatory
-    code = str(random.randint(100000, 999999))
-    admin_2fa_codes[username] = code
-    email_html = f"<p>Your SmartPochi admin 2FA code is: <b>{code}</b></p>"
-    send_email(ADMIN_EMAIL, "SmartPochi Admin 2FA Verification", email_html)
-    return templates.TemplateResponse("admin_2fa.html", {"request": request, "username": username})
-
-@app.post("/admin_2fa_verify", response_class=HTMLResponse)
-def admin_2fa_verify_post(request: Request, username: str = Form(...), code: str = Form(...)):
-    expected_code = admin_2fa_codes.get(username)
-    if expected_code != code:
-        return templates.TemplateResponse("admin_2fa.html", {"request": request, "username": username, "error": "Incorrect code"})
-    admin_2fa_codes.pop(username, None)
-    token = create_admin_session()
-    response = RedirectResponse("/admin_dashboard", status_code=303)
-    response.set_cookie("admin_session", token)
-    return response
-
-# ------------------------
-# ADMIN DASHBOARD & ACTIONS
-# ------------------------
-@app.get("/admin_dashboard", response_class=HTMLResponse)
-def admin_dashboard_page(request: Request):
-    token = request.cookies.get("admin_session")
-    if not verify_admin_session(token):
-        return RedirectResponse("/admin_login_page")
-
+# ─── DELETE UPLOAD ────────────────────────────────
+@app.post("/delete_upload")
+def delete_upload(request: Request, upload_id: int=Form(...), client_id: int=Form(...)):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT COUNT(*) FROM clients")
-    total_clients = c.fetchone()[0]
-    c.execute("SELECT COUNT(*) FROM clients WHERE premium=1")
-    premium_count = c.fetchone()[0]
-    c.execute("SELECT COUNT(*) FROM clients WHERE blocked=1")
-    blocked_count = c.fetchone()[0]
-    c.execute("SELECT COUNT(*) FROM clients WHERE verified=1")
-    verified_count = c.fetchone()[0]
-    c.execute("SELECT COUNT(*) FROM clients WHERE approved=0 AND verified=1")
-    pending_count = c.fetchone()[0]
-    c.execute("SELECT * FROM clients WHERE approved=0 AND verified=1")
-    new_regs = c.fetchall()
-    c.execute("SELECT * FROM clients WHERE approved=1")
-    approved_clients = c.fetchall()
+    c.execute("SELECT filename FROM csv_uploads WHERE id=? AND client_id=?", (upload_id, client_id))
+    row = c.fetchone()
+    if row:
+        try: os.remove(UPLOAD_DIR / row[0])
+        except: pass
+        c.execute("DELETE FROM csv_uploads WHERE id=?", (upload_id,))
+        conn.commit()
     conn.close()
+    return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
 
+# ─── GOALS ────────────────────────────────────────
+@app.post("/add_goal")
+def add_goal(request: Request, client_id: int=Form(...), title: str=Form(...),
+             target_amount: float=Form(...), period: str=Form(...)):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO goals (client_id,title,target_amount,period) VALUES (?,?,?,?)",
+              (client_id, title, target_amount, period))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
+
+@app.post("/delete_goal")
+def delete_goal(goal_id: int=Form(...), client_id: int=Form(...)):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM goals WHERE id=? AND client_id=?", (goal_id, client_id))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
+
+# ─── SUPPLIERS (PREMIUM) ──────────────────────────
+@app.post("/add_supplier")
+def add_supplier(request: Request, client_id: int=Form(...), name: str=Form(...),
+                 amount_owed: float=Form(...), due_date: str=Form(...)):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO suppliers (client_id,name,amount_owed,due_date) VALUES (?,?,?,?)",
+              (client_id, name, amount_owed, due_date))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
+
+@app.post("/delete_supplier")
+def delete_supplier(supplier_id: int=Form(...), client_id: int=Form(...)):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM suppliers WHERE id=? AND client_id=?", (supplier_id, client_id))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
+
+# ─── STAFF SALARIES (PREMIUM) ─────────────────────
+@app.post("/add_salary")
+def add_salary(request: Request, client_id: int=Form(...), staff_name: str=Form(...),
+               amount: float=Form(...), paid_date: str=Form(...)):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO staff_salaries (client_id,staff_name,amount,paid_date) VALUES (?,?,?,?)",
+              (client_id, staff_name, amount, paid_date))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
+
+# ─── FLOAT TRACKER (PREMIUM) ──────────────────────
+@app.post("/update_float")
+def update_float(request: Request, client_id: int=Form(...),
+                 float_amount: float=Form(...), alert_threshold: float=Form(...)):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO float_tracker (client_id,float_amount,alert_threshold) VALUES (?,?,?)",
+              (client_id, float_amount, alert_threshold))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
+
+# ─── SETTINGS ─────────────────────────────────────
+@app.post("/change_password")
+def change_password(request: Request, client_id: int=Form(...),
+                    old_password: str=Form(...), new_password: str=Form(...)):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id FROM clients WHERE id=? AND password=?", (client_id, hash_password(old_password)))
+    if not c.fetchone():
+        conn.close()
+        return RedirectResponse(f"/client_dashboard/{client_id}?error=Wrong+current+password", status_code=303)
+    c.execute("UPDATE clients SET password=? WHERE id=?", (hash_password(new_password), client_id))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/client_dashboard/{client_id}?success=Password+changed", status_code=303)
+
+@app.post("/toggle_2fa")
+def toggle_2fa(request: Request, client_id: int=Form(...)):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT two_fa_enabled FROM clients WHERE id=?", (client_id,))
+    row = c.fetchone()
+    new_val = 0 if row[0] else 1
+    c.execute("UPDATE clients SET two_fa_enabled=? WHERE id=?", (new_val, client_id))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
+
+# ─── CLIENT LOGOUT ────────────────────────────────
+@app.get("/client_logout")
+def client_logout():
+    resp = RedirectResponse("/login_page")
+    resp.delete_cookie("client_id")
+    return resp
+
+# ─── PANDA BOT API ────────────────────────────────
+@app.post("/panda_chat")
+async def panda_chat(request: Request):
+    body = await request.json()
+    msg = body.get("message","").lower()
+    client_id = body.get("client_id")
+    client = get_client(client_id) if client_id else None
+    premium = client['premium'] if client else False
+
+    if any(w in msg for w in ['server','admin','password','database','secret','token']):
+        return JSONResponse({"reply":"🐼 I can't share system information. I'm here to help with your finances!"})
+    if 'upload' in msg or 'pdf' in msg or 'csv' in msg:
+        return JSONResponse({"reply":"🐼 To analyze your M-Pesa statement, upload a PDF or CSV file using the upload button above!"})
+    if 'money in' in msg or 'income' in msg:
+        return JSONResponse({"reply":"🐼 Money In shows all funds received in your M-Pesa. Upload a statement to see your totals!"})
+    if 'money out' in msg or 'expense' in msg:
+        return JSONResponse({"reply":"🐼 Money Out shows all payments and transfers made. Keep this lower than Money In for profit!"})
+    if 'leak' in msg or 'gambling' in msg or 'bet' in msg:
+        if premium:
+            return JSONResponse({"reply":"🐼 Premium feature! Your money leak report flags betting, gambling and unusual outflows automatically."})
+        return JSONResponse({"reply":"🐼 Money leak detection is a Premium feature. Upgrade to KES 3,500/month to access it!"})
+    if 'health' in msg or 'score' in msg:
+        if premium:
+            return JSONResponse({"reply":"🐼 Your Business Health Score (0-100) is calculated from your income, expenses and spending habits!"})
+        return JSONResponse({"reply":"🐼 Business Health Score is a Premium feature. Upgrade to unlock it!"})
+    if 'tax' in msg or 'kra' in msg:
+        if premium:
+            return JSONResponse({"reply":"🐼 Your tax estimate is based on 16% VAT of your total income. Always consult a tax professional for official filing!"})
+        return JSONResponse({"reply":"🐼 Tax estimation is a Premium feature. Upgrade to KES 3,500/month!"})
+    if 'premium' in msg or 'upgrade' in msg:
+        return JSONResponse({"reply":"🐼 Premium Plan is KES 3,500/month! You get unlimited uploads, charts, money leak detection, tax estimates, health score and more. Contact support to upgrade!"})
+    if 'goal' in msg or 'target' in msg:
+        return JSONResponse({"reply":"🐼 Use the Goal Tracker to set monthly income targets and track your progress!"})
+    if 'supplier' in msg:
+        if premium:
+            return JSONResponse({"reply":"🐼 Track what you owe suppliers in the Supplier Tracker section below!"})
+        return JSONResponse({"reply":"🐼 Supplier tracking is a Premium feature!"})
+    if 'hello' in msg or 'hi' in msg or 'hey' in msg:
+        return JSONResponse({"reply":f"🐼 Hello! I'm Panda, your Smart Pochi assistant! {'You have Premium access — ask me anything!' if premium else 'Ask me about your finances or how to use Smart Pochi!'}"})
+    return JSONResponse({"reply":"🐼 I'm here to help with your M-Pesa analysis! Ask me about uploads, income, expenses, goals or Premium features."})
+
+# ─── ADMIN ────────────────────────────────────────
+@app.get("/admin_login_page", response_class=HTMLResponse)
+def admin_login_page(request: Request):
+    return templates.TemplateResponse("admin_login.html", {"request":request})
+
+@app.post("/admin_login", response_class=HTMLResponse)
+def admin_login_post(request: Request, username: str=Form(...), password: str=Form(...)):
+    if username != ADMIN_USERNAME or password != ADMIN_PASSWORD:
+        return templates.TemplateResponse("admin_login.html", {"request":request,"error":"Invalid credentials"})
+    code = str(random.randint(100000,999999))
+    admin_2fa_codes[username] = code
+    html = f"<p>Your Smart Pochi admin 2FA code is: <b style='font-size:28px;color:#0ea5e9'>{code}</b></p>"
+    send_email(ADMIN_EMAIL, "Smart Pochi Admin 2FA", html)
+    return templates.TemplateResponse("admin_2fa.html", {"request":request,"username":username})
+
+@app.post("/admin_2fa_verify", response_class=HTMLResponse)
+def admin_2fa_verify(request: Request, username: str=Form(...), code: str=Form(...)):
+    if admin_2fa_codes.get(username) != code:
+        return templates.TemplateResponse("admin_2fa.html", {"request":request,"username":username,"error":"Invalid code"})
+    token = secrets.token_hex(32)
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO admin_sessions (token,created_at) VALUES (?,?)", (token, str(datetime.now())))
+    conn.commit()
+    conn.close()
+    resp = RedirectResponse("/admin_dashboard", status_code=303)
+    resp.set_cookie("admin_token", token, httponly=True)
+    return resp
+
+@app.get("/admin_dashboard", response_class=HTMLResponse)
+def admin_dashboard(request: Request, admin_token: str=Cookie(default=None)):
+    if not verify_admin_session(admin_token):
+        return RedirectResponse("/admin_login_page")
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM clients")
+    total = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM clients WHERE premium=1")
+    premium = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM clients WHERE blocked=1")
+    blocked = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM clients WHERE verified=1")
+    verified = c.fetchone()[0]
+    c.execute("SELECT * FROM clients WHERE approved=0 AND verified=1")
+    pending = [dict(r) for r in c.fetchall()]
+    c.execute("SELECT * FROM clients WHERE approved=1 ORDER BY id DESC")
+    approved = [dict(r) for r in c.fetchall()]
+    c.execute("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 20")
+    logs = [dict(r) for r in c.fetchall()]
+    conn.close()
     return templates.TemplateResponse("admin_dashboard.html", {
-        "request": request,
-        "total_clients": total_clients,
-        "premium_count": premium_count,
-        "blocked_count": blocked_count,
-        "verified_count": verified_count,
-        "pending_count": pending_count,
-        "new_regs": new_regs,
-        "approved_clients": approved_clients
+        "request":request,
+        "total":total,"premium":premium,"blocked":blocked,"verified":verified,
+        "pending_clients":pending,"approved_clients":approved,"logs":logs
     })
 
-# ------------------------
-# APPROVE CLIENT
-# ------------------------
 @app.post("/approve_client")
-def approve_client(client_id: int = Form(...), account_number: str = Form(...)):
+def approve_client(request: Request, client_id: int=Form(...),
+                   account_number: str=Form(...), admin_token: str=Cookie(default=None)):
+    if not verify_admin_session(admin_token):
+        return RedirectResponse("/admin_login_page")
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("UPDATE clients SET approved=1, account_number=? WHERE id=?", (account_number, client_id))
-    c.execute("SELECT email FROM clients WHERE id=?", (client_id,))
-    email = c.fetchone()[0]
     conn.commit()
+    c.execute("SELECT email, fname FROM clients WHERE id=?", (client_id,))
+    row = c.fetchone()
     conn.close()
-    send_email(email, "Smart Pochi Account Approved", f"<p>Your account has been approved.<br>Your Unique Account Number: <b>{account_number}</b></p>")
-    log_action(f"Approved client {client_id}")
+    if row:
+        html = f"""<div style='font-family:Arial;padding:20px;background:#0a1220;color:#e8f4ff;border-radius:10px'>
+            <h2 style='color:#0ea5e9'>Smart Pochi Account Approved! 🎉</h2>
+            <p>Hello {row[0]},</p>
+            <p>Your account has been approved. Your login account number is:</p>
+            <h1 style='color:#0ea5e9;letter-spacing:3px'>{account_number}</h1>
+            <p>Login at: <a href='https://smart-pochi.onrender.com/login_page' style='color:#0ea5e9'>Smart Pochi</a></p>
+        </div>"""
+        send_email(row[1], "Smart Pochi Account Approved!", html)
+    log_action(f"Approved client {client_id} with account {account_number}")
     return RedirectResponse("/admin_dashboard", status_code=303)
 
 @app.post("/toggle_premium")
-def toggle_premium(client_id: int = Form(...)):
+def toggle_premium(client_id: int=Form(...), admin_token: str=Cookie(default=None)):
+    if not verify_admin_session(admin_token):
+        return RedirectResponse("/admin_login_page")
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT premium FROM clients WHERE id=?", (client_id,))
-    current = c.fetchone()[0]
-    new_value = 0 if current == 1 else 1
-    c.execute("UPDATE clients SET premium=? WHERE id=?", (new_value, client_id))
+    row = c.fetchone()
+    new_val = 0 if row[0] else 1
+    c.execute("UPDATE clients SET premium=? WHERE id=?", (new_val, client_id))
     conn.commit()
     conn.close()
+    log_action(f"Toggled premium for client {client_id} to {new_val}")
     return RedirectResponse("/admin_dashboard", status_code=303)
 
 @app.post("/toggle_block")
-def toggle_block(client_id: int = Form(...)):
+def toggle_block(client_id: int=Form(...), admin_token: str=Cookie(default=None)):
+    if not verify_admin_session(admin_token):
+        return RedirectResponse("/admin_login_page")
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT blocked FROM clients WHERE id=?", (client_id,))
-    current = c.fetchone()[0]
-    new_value = 0 if current == 1 else 1
-    c.execute("UPDATE clients SET blocked=? WHERE id=?", (new_value, client_id))
+    row = c.fetchone()
+    new_val = 0 if row[0] else 1
+    c.execute("UPDATE clients SET blocked=? WHERE id=?", (new_val, client_id))
     conn.commit()
     conn.close()
+    log_action(f"Toggled block for client {client_id} to {new_val}")
     return RedirectResponse("/admin_dashboard", status_code=303)
+
+@app.get("/admin_logout")
+def admin_logout(admin_token: str=Cookie(default=None)):
+    if admin_token:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("DELETE FROM admin_sessions WHERE token=?", (admin_token,))
+        conn.commit()
+        conn.close()
+    resp = RedirectResponse("/admin_login_page")
+    resp.delete_cookie("admin_token")
+    return resp
