@@ -37,7 +37,7 @@ ADMIN_PASSWORD = "@Kalali1."
 ADMIN_EMAIL = "kaliworks61@gmail.com"
 ADMIN_APP_PASSWORD = "mhsoqboqfqgacbmw"
 SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 465
+SMTP_PORT = 587
 
 admin_2fa_codes = {}
 client_2fa_codes = {}
@@ -59,7 +59,8 @@ def send_email(to_email, subject, body_html):
         msg['To'] = to_email
         msg.set_content("This email requires HTML support.")
         msg.add_alternative(body_html, subtype='html')
-        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
             server.login(ADMIN_EMAIL, ADMIN_APP_PASSWORD)
             server.send_message(msg)
         print(f"[EMAIL] Sent to {to_email}")
