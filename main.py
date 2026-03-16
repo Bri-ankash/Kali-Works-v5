@@ -9,6 +9,7 @@ import secrets
 import hashlib
 import smtplib
 import random
+import threading
 import csv
 import json
 from datetime import datetime, timedelta
@@ -528,7 +529,7 @@ def admin_login_post(request: Request, username: str=Form(...), password: str=Fo
     code = str(random.randint(100000,999999))
     admin_2fa_codes[username] = code
     html = f"<p>Your Smart Pochi admin 2FA code is: <b style='font-size:28px;color:#0ea5e9'>{code}</b></p>"
-    send_email(ADMIN_EMAIL, "Smart Pochi Admin 2FA", html)
+    threading.Thread(target=send_email, args=(ADMIN_EMAIL, "Smart Pochi Admin 2FA", html)).start()
     return templates.TemplateResponse("admin_2fa.html", {"request":request,"username":username})
 
 @app.post("/admin_2fa_verify", response_class=HTMLResponse)
