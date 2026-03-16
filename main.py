@@ -32,8 +32,8 @@ from database import init_db, DB_PATH
 UPLOAD_DIR = Path("data/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "SmartPochi@2026"
+ADMIN_USERNAME = "Kalali"
+ADMIN_PASSWORD = "@Kalali1."
 ADMIN_EMAIL = "kaliworks61@gmail.com"
 ADMIN_APP_PASSWORD = "mhsoqboqfqgacbmw"
 SMTP_SERVER = "smtp.gmail.com"
