@@ -32,10 +32,10 @@ from database import init_db, DB_PATH
 UPLOAD_DIR = Path("data/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "SmartPochi@2026")
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "kaliworks61@gmail.com")
-ADMIN_APP_PASSWORD = os.getenv("ADMIN_APP_PASSWORD")
+ADMIN_USERNAME = "admin"
+ADMIN_PASSWORD = "SmartPochi@2026"
+ADMIN_EMAIL = "kaliworks61@gmail.com"
+ADMIN_APP_PASSWORD = "mhsoqboqfqgacbmw"
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 465
 
@@ -203,7 +203,7 @@ def register(request: Request, fname: str=Form(...), lname: str=Form(...),
               (fname,lname,id_pass,email,mobile,hashed))
     conn.commit()
     conn.close()
-    BASE_URL = os.getenv("BASE_URL", "http://localhost:8080")
+    BASE_URL = "https://smart-pochi.onrender.com"
     verify_link = f"{BASE_URL}/confirm_email?email={email}"
     html = f"""<div style='font-family:Arial;padding:20px;background:#0a1220;color:#e8f4ff;border-radius:10px'>
         <h2 style='color:#0ea5e9'>Welcome to Smart Pochi! 🐼</h2>
