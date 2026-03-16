@@ -304,6 +304,12 @@ def client_dashboard(request: Request, client_id: int):
         c.execute("SELECT * FROM float_tracker WHERE client_id=? ORDER BY recorded_at DESC LIMIT 1", (client_id,))
         row = c.fetchone()
         float_data = dict(row) if row else None
+    # Budgets
+    c.execute("SELECT * FROM budgets WHERE client_id=? ORDER BY month DESC", (client_id,))
+    budgets = [dict(r) for r in c.fetchall()]
+    # Invoices
+    c.execute("SELECT * FROM invoices WHERE client_id=? ORDER BY created_at DESC", (client_id,))
+    invoices = [dict(r) for r in c.fetchall()]
     conn.close()
     return templates.TemplateResponse("client_dashboard.html", {
         "request": request,
@@ -313,6 +319,8 @@ def client_dashboard(request: Request, client_id: int):
         "suppliers": suppliers,
         "salaries": salaries,
         "float_data": float_data,
+        "budgets": budgets,
+        "invoices": invoices,
         "upload_count": len(uploads),
         "max_uploads": 100 if client['premium'] else 5
     })
@@ -509,7 +517,7 @@ async def panda_chat(request: Request):
     return JSONResponse({"reply":"🐼 I'm here to help with your M-Pesa analysis! Ask me about uploads, income, expenses, goals or Premium features."})
 
 # ─── ADMIN ────────────────────────────────────────
-@app.get("/admin_login_page", response_class=HTMLResponse)
+@app.get("/sp-admin-kalali", response_class=HTMLResponse)
 def admin_login_page(request: Request):
     return templates.TemplateResponse("admin_login.html", {"request":request})
 
@@ -540,7 +548,7 @@ def admin_2fa_verify(request: Request, username: str=Form(...), code: str=Form(.
 @app.get("/admin_dashboard", response_class=HTMLResponse)
 def admin_dashboard(request: Request, admin_token: str=Cookie(default=None)):
     if not verify_admin_session(admin_token):
-        return RedirectResponse("/admin_login_page")
+        return RedirectResponse("/sp-admin-kalali")
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
@@ -569,7 +577,7 @@ def admin_dashboard(request: Request, admin_token: str=Cookie(default=None)):
 def approve_client(request: Request, client_id: int=Form(...),
                    account_number: str=Form(...), admin_token: str=Cookie(default=None)):
     if not verify_admin_session(admin_token):
-        return RedirectResponse("/admin_login_page")
+        return RedirectResponse("/sp-admin-kalali")
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("UPDATE clients SET approved=1, account_number=? WHERE id=?", (account_number, client_id))
@@ -592,7 +600,7 @@ def approve_client(request: Request, client_id: int=Form(...),
 @app.post("/toggle_premium")
 def toggle_premium(client_id: int=Form(...), admin_token: str=Cookie(default=None)):
     if not verify_admin_session(admin_token):
-        return RedirectResponse("/admin_login_page")
+        return RedirectResponse("/sp-admin-kalali")
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT premium FROM clients WHERE id=?", (client_id,))
@@ -607,7 +615,7 @@ def toggle_premium(client_id: int=Form(...), admin_token: str=Cookie(default=Non
 @app.post("/toggle_block")
 def toggle_block(client_id: int=Form(...), admin_token: str=Cookie(default=None)):
     if not verify_admin_session(admin_token):
-        return RedirectResponse("/admin_login_page")
+        return RedirectResponse("/sp-admin-kalali")
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT blocked FROM clients WHERE id=?", (client_id,))
@@ -627,6 +635,61 @@ def admin_logout(admin_token: str=Cookie(default=None)):
         c.execute("DELETE FROM admin_sessions WHERE token=?", (admin_token,))
         conn.commit()
         conn.close()
-    resp = RedirectResponse("/admin_login_page")
+    resp = RedirectResponse("/sp-admin-kalali")
     resp.delete_cookie("admin_token")
     return resp
+
+# ─── BUDGET TRACKER ───────────────────────────────
+@app.post("/add_budget")
+def add_budget(request: Request, client_id: int=Form(...), category: str=Form(...),
+               budget_amount: float=Form(...), month: str=Form(...)):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO budgets (client_id,category,budget_amount,month) VALUES (?,?,?,?)",
+              (client_id, category, budget_amount, month))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
+
+@app.post("/delete_budget")
+def delete_budget(budget_id: int=Form(...), client_id: int=Form(...)):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM budgets WHERE id=? AND client_id=?", (budget_id, client_id))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
+
+# ─── INVOICE GENERATOR ────────────────────────────
+@app.post("/create_invoice")
+def create_invoice(request: Request, client_id: int=Form(...),
+                   client_name: str=Form(...), client_email: str=Form(...),
+                   items: str=Form(...), total: float=Form(...)):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM invoices WHERE client_id=?", (client_id,))
+    count = c.fetchone()[0] + 1
+    inv_num = f"SP-INV-{client_id}-{count:03d}"
+    c.execute("INSERT INTO invoices (client_id,invoice_number,client_name,client_email,items,total) VALUES (?,?,?,?,?,?)",
+              (client_id, inv_num, client_name, client_email, items, total))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
+
+@app.post("/mark_invoice_paid")
+def mark_invoice_paid(invoice_id: int=Form(...), client_id: int=Form(...)):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("UPDATE invoices SET status='paid' WHERE id=? AND client_id=?", (invoice_id, client_id))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
+
+@app.post("/delete_invoice")
+def delete_invoice(invoice_id: int=Form(...), client_id: int=Form(...)):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM invoices WHERE id=? AND client_id=?", (invoice_id, client_id))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)

@@ -122,6 +122,8 @@ body{background:var(--bg);color:var(--white);font-family:'Segoe UI',sans-serif;m
     <button class="tab" onclick="showTab('salaries')">👥 Salaries</button>
     <button class="tab" onclick="showTab('float')">💧 Float</button>
     {% endif %}
+    <button class="tab" onclick="showTab('budget')">💵 Budget</button>
+    <button class="tab" onclick="showTab('invoices')">🧾 Invoices</button>
     <button class="tab" onclick="showTab('settings')">⚙️ Settings</button>
   </div>
 
@@ -594,6 +596,149 @@ body{background:var(--bg);color:var(--white);font-family:'Segoe UI',sans-serif;m
     </div>
   </div>
   {% endif %}
+
+
+  <!-- BUDGET TAB -->
+  <div id="tab-budget" class="tab-content">
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-top"></div>
+        <div class="section-title">💵 Set Monthly Budget</div>
+        <form action="/add_budget" method="post">
+          <input type="hidden" name="client_id" value="{{ client.id }}"/>
+          <div class="form-group">
+            <label>Category</label>
+            <select class="form-input" name="category">
+              <option>Food & Groceries</option>
+              <option>Transport</option>
+              <option>Rent & Utilities</option>
+              <option>Staff Salaries</option>
+              <option>Suppliers</option>
+              <option>Marketing</option>
+              <option>Equipment</option>
+              <option>Entertainment</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Budget Amount (KES)</label>
+            <input class="form-input" type="number" name="budget_amount" placeholder="10000" required/>
+          </div>
+          <div class="form-group">
+            <label>Month</label>
+            <input class="form-input" type="month" name="month" required/>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%">Set Budget</button>
+        </form>
+      </div>
+      <div>
+        <div class="section-title">📊 Budget Overview</div>
+        {% if budgets %}
+          {% for b in budgets %}
+          <div class="card" style="margin-bottom:10px">
+            <div class="card-top"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <div>
+                <div style="font-weight:700">{{ b.category }}</div>
+                <div style="color:var(--muted);font-size:12px">{{ b.month }}</div>
+              </div>
+              <form action="/delete_budget" method="post">
+                <input type="hidden" name="budget_id" value="{{ b.id }}"/>
+                <input type="hidden" name="client_id" value="{{ client.id }}"/>
+                <button type="submit" class="btn btn-danger" style="padding:3px 10px;font-size:11px">✕</button>
+              </form>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+              <span style="color:var(--muted)">Budget: KES {{ "{:,.0f}".format(b.budget_amount) }}</span>
+            </div>
+            <div class="goal-bar">
+              <div class="goal-progress" style="width:0%;background:linear-gradient(90deg,#22c55e,#16a34a)"></div>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div style="text-align:center;padding:40px;color:var(--muted)">
+            <div style="font-size:40px;margin-bottom:12px">💵</div>
+            No budgets set yet!
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- INVOICES TAB -->
+  <div id="tab-invoices" class="tab-content">
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-top"></div>
+        <div class="section-title">🧾 Create Invoice</div>
+        <form action="/create_invoice" method="post">
+          <input type="hidden" name="client_id" value="{{ client.id }}"/>
+          <div class="form-group">
+            <label>Client Name</label>
+            <input class="form-input" type="text" name="client_name" placeholder="Business or Person Name" required/>
+          </div>
+          <div class="form-group">
+            <label>Client Email</label>
+            <input class="form-input" type="email" name="client_email" placeholder="client@email.com"/>
+          </div>
+          <div class="form-group">
+            <label>Items / Description</label>
+            <textarea class="form-input" name="items" rows="3" placeholder="Web design - KES 8,000&#10;Hosting - KES 2,000" style="resize:vertical"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Total Amount (KES)</label>
+            <input class="form-input" type="number" name="total" placeholder="10000" required/>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%">Generate Invoice</button>
+        </form>
+      </div>
+      <div class="card">
+        <div class="card-top"></div>
+        <div class="section-title">📋 Your Invoices</div>
+        {% if invoices %}
+          {% for inv in invoices %}
+          <div style="background:var(--card2);border-radius:10px;padding:14px;margin-bottom:10px;border:1px solid var(--border)">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+              <div>
+                <div style="font-weight:700;font-size:14px">{{ inv.client_name }}</div>
+                <div style="color:var(--blue);font-size:11px;font-weight:600">{{ inv.invoice_number }}</div>
+                <div style="color:var(--muted);font-size:11px">{{ inv.created_at[:10] }}</div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:16px;font-weight:800;color:{% if inv.status=='paid' %}var(--green){% else %}var(--yellow){% endif %}">
+                  KES {{ "{:,.0f}".format(inv.total) }}
+                </div>
+                <span style="font-size:10px;font-weight:700;color:{% if inv.status=='paid' %}var(--green){% else %}var(--yellow){% endif %}">
+                  {{ inv.status|upper }}
+                </span>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              {% if inv.status != 'paid' %}
+              <form action="/mark_invoice_paid" method="post" style="display:inline">
+                <input type="hidden" name="invoice_id" value="{{ inv.id }}"/>
+                <input type="hidden" name="client_id" value="{{ client.id }}"/>
+                <button type="submit" class="btn btn-success" style="padding:4px 10px;font-size:11px">✓ Mark Paid</button>
+              </form>
+              {% endif %}
+              <form action="/delete_invoice" method="post" style="display:inline">
+                <input type="hidden" name="invoice_id" value="{{ inv.id }}"/>
+                <input type="hidden" name="client_id" value="{{ client.id }}"/>
+                <button type="submit" class="btn btn-danger" style="padding:4px 10px;font-size:11px">🗑 Delete</button>
+              </form>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div style="text-align:center;padding:40px;color:var(--muted)">
+            <div style="font-size:40px;margin-bottom:12px">🧾</div>
+            No invoices yet. Create your first!
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
 
   <!-- SETTINGS TAB -->
   <div id="tab-settings" class="tab-content">
