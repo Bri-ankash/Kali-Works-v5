@@ -517,7 +517,7 @@ async def panda_chat(request: Request):
     return JSONResponse({"reply":"🐼 I'm here to help with your M-Pesa analysis! Ask me about uploads, income, expenses, goals or Premium features."})
 
 # ─── ADMIN ────────────────────────────────────────
-@app.get("/sp-admin-kalali", response_class=HTMLResponse)
+@app.get("/smartpochi-admin", response_class=HTMLResponse)
 def admin_login_page(request: Request):
     return templates.TemplateResponse("admin_login.html", {"request":request})
 
@@ -548,7 +548,7 @@ def admin_2fa_verify(request: Request, username: str=Form(...), code: str=Form(.
 @app.get("/admin_dashboard", response_class=HTMLResponse)
 def admin_dashboard(request: Request, admin_token: str=Cookie(default=None)):
     if not verify_admin_session(admin_token):
-        return RedirectResponse("/sp-admin-kalali")
+        return RedirectResponse("/smartpochi-admin")
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
@@ -577,7 +577,7 @@ def admin_dashboard(request: Request, admin_token: str=Cookie(default=None)):
 def approve_client(request: Request, client_id: int=Form(...),
                    account_number: str=Form(...), admin_token: str=Cookie(default=None)):
     if not verify_admin_session(admin_token):
-        return RedirectResponse("/sp-admin-kalali")
+        return RedirectResponse("/smartpochi-admin")
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("UPDATE clients SET approved=1, account_number=? WHERE id=?", (account_number, client_id))
@@ -600,7 +600,7 @@ def approve_client(request: Request, client_id: int=Form(...),
 @app.post("/toggle_premium")
 def toggle_premium(client_id: int=Form(...), admin_token: str=Cookie(default=None)):
     if not verify_admin_session(admin_token):
-        return RedirectResponse("/sp-admin-kalali")
+        return RedirectResponse("/smartpochi-admin")
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT premium FROM clients WHERE id=?", (client_id,))
@@ -615,7 +615,7 @@ def toggle_premium(client_id: int=Form(...), admin_token: str=Cookie(default=Non
 @app.post("/toggle_block")
 def toggle_block(client_id: int=Form(...), admin_token: str=Cookie(default=None)):
     if not verify_admin_session(admin_token):
-        return RedirectResponse("/sp-admin-kalali")
+        return RedirectResponse("/smartpochi-admin")
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT blocked FROM clients WHERE id=?", (client_id,))
@@ -635,7 +635,7 @@ def admin_logout(admin_token: str=Cookie(default=None)):
         c.execute("DELETE FROM admin_sessions WHERE token=?", (admin_token,))
         conn.commit()
         conn.close()
-    resp = RedirectResponse("/sp-admin-kalali")
+    resp = RedirectResponse("/smartpochi-admin")
     resp.delete_cookie("admin_token")
     return resp
 
