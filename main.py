@@ -1,5 +1,5 @@
 # ================================
-# Kali Works V5 – Production SaaS
+# Smart Pochi – Production SaaS
 # ================================
 
 import os
@@ -28,7 +28,7 @@ import os
 os.makedirs("data/uploads", exist_ok=True)
 
 # Update database path
-DB_PATH = 'data/kaliworks_backup.db'
+DB_PATH = 'data/smartpochi_backup.db'
 
 # Update upload folder path
 UPLOAD_FOLDER = 'data/uploads'
@@ -38,7 +38,7 @@ UPLOAD_FOLDER = 'data/uploads'
 # CONFIG
 # ------------------------
 BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = 'data/kaliworks_backup.db'
+DB_PATH = 'data/smartpochi_backup.db'
 UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
@@ -235,13 +235,13 @@ def register(
     conn.commit()
     conn.close()
 
-    verify_link = f"http://localhost:8000/confirm_email?email={email}"
+    verify_link = f"https://smart-pochi.onrender.com/confirm_email?email={email}"
     email_html = f"""<html><body>
-      <h2>Welcome to Kali Works!</h2>
+      <h2>Welcome to Smart Pochi!</h2>
       <p>Click below to confirm your email:</p>
       <a href="{verify_link}" style="padding:10px 20px;background-color:green;color:white;text-decoration:none;">Confirm Email</a>
     </body></html>"""
-    send_email(email, "Confirm your Kali Works account", email_html)
+    send_email(email, "Confirm your Smart Pochi account", email_html)
     return templates.TemplateResponse(
         "registration_pending.html",
         {"request": request, "message": "Status Pending. Check your email to verify."}
@@ -356,8 +356,8 @@ def admin_login_post(request: Request, username: str = Form(...), password: str 
     # FIXED: 2FA mandatory
     code = str(random.randint(100000, 999999))
     admin_2fa_codes[username] = code
-    email_html = f"<p>Your KaliWorks admin 2FA code is: <b>{code}</b></p>"
-    send_email(ADMIN_EMAIL, "KaliWorks Admin 2FA Verification", email_html)
+    email_html = f"<p>Your SmartPochi admin 2FA code is: <b>{code}</b></p>"
+    send_email(ADMIN_EMAIL, "SmartPochi Admin 2FA Verification", email_html)
     return templates.TemplateResponse("admin_2fa.html", {"request": request, "username": username})
 
 @app.post("/admin_2fa_verify", response_class=HTMLResponse)
@@ -421,7 +421,7 @@ def approve_client(client_id: int = Form(...), account_number: str = Form(...)):
     email = c.fetchone()[0]
     conn.commit()
     conn.close()
-    send_email(email, "Kali Works Account Approved", f"<p>Your account has been approved.<br>Your Unique Account Number: <b>{account_number}</b></p>")
+    send_email(email, "Smart Pochi Account Approved", f"<p>Your account has been approved.<br>Your Unique Account Number: <b>{account_number}</b></p>")
     log_action(f"Approved client {client_id}")
     return RedirectResponse("/admin_dashboard", status_code=303)
 

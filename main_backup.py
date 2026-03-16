@@ -1,5 +1,5 @@
 # ================================
-# Kali Works V4 – Production SaaS
+# Smart Pochi V4 – Production SaaS
 # ================================
 
 import os
@@ -23,7 +23,7 @@ load_dotenv()
 # CONFIG
 # ------------------------
 BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "kaliworks.db"
+DB_PATH = BASE_DIR / "smartpochi.db"
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -187,13 +187,13 @@ def register(
     email_html = f"""
         <html>
             <body>
-                <h2>Welcome to Kali Works!</h2>
+                <h2>Welcome to Smart Pochi!</h2>
                 <p>Click the button below to confirm your email:</p>
                 <a href="{verify_link}" style="padding:10px 20px;background-color:green;color:white;text-decoration:none;">Confirm Email</a>
             </body>
         </html>
     """
-    send_email(email, "Confirm your Kali Works account", email_html)
+    send_email(email, "Confirm your Smart Pochi account", email_html)
 
     return templates.TemplateResponse("registration_pending.html", {"request": request, "message": "Status Pending. Check your email to verify."})
 
@@ -257,8 +257,8 @@ def admin_login_post(request: Request, username: str = Form(...), password: str 
     if ADMIN_2FA_ENABLED:
         code = str(random.randint(100000, 999999))
         admin_2fa_codes[username] = code
-        email_html = f"<p>Your KaliWorks admin 2FA code is: <b>{code}</b></p>"
-        send_email(ADMIN_EMAIL, "KaliWorks Admin 2FA Verification", email_html)
+        email_html = f"<p>Your SmartPochi admin 2FA code is: <b>{code}</b></p>"
+        send_email(ADMIN_EMAIL, "SmartPochi Admin 2FA Verification", email_html)
         response = templates.TemplateResponse("admin_2fa.html", {"request": request, "username": username})
         return response
     return RedirectResponse("/admin_dashboard", status_code=303)
@@ -300,7 +300,7 @@ def approve_client(client_id: int = Form(...), account_number: str = Form(...)):
     email = c.fetchone()[0]
     conn.commit()
     conn.close()
-    send_email(email, "Kali Works Account Approved", f"<p>Your account has been approved.<br>Your Unique Account Number: <b>{account_number}</b></p>")
+    send_email(email, "Smart Pochi Account Approved", f"<p>Your account has been approved.<br>Your Unique Account Number: <b>{account_number}</b></p>")
     log_action(f"Approved client {client_id}")
     return RedirectResponse("/admin_dashboard", status_code=303)
 
