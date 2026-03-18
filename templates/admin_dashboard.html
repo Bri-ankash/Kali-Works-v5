@@ -130,7 +130,7 @@ body{background:var(--bg);color:var(--white);font-family:'Segoe UI',sans-serif;m
             <td style="color:var(--muted)">{{ c.email }}</td>
             <td style="color:var(--muted)">{{ c.mobile }}</td>
             <td style="color:var(--muted)">{{ c.id_pass }}</td>
-            <td style="color:var(--faint)">{{ c.created_at[:10] if c.created_at else 'N/A' }}</td>
+            <td style="color:var(--faint)">{{ c.created_at.strftime('%Y-%m-%d') if c.created_at else 'N/A' }}</td>
             <td>
               <form action="/approve_client" method="post" style="display:flex;gap:8px;align-items:center">
                 <input type="hidden" name="client_id" value="{{ c.id }}"/>
