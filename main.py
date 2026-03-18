@@ -616,7 +616,7 @@ def toggle_premium(client_id: int=Form(...), admin_token: str=Cookie(default=Non
     c = conn.cursor(cursor_factory=RealDictCursor)
     c.execute("SELECT premium FROM clients WHERE id=%s", (client_id,))
     row = c.fetchone()
-    new_val = 0 if row[0] else 1
+    new_val = 0 if row['premium'] else 1
     c.execute("UPDATE clients SET premium=%s WHERE id=%s", (new_val, client_id))
     conn.commit()
     conn.close()
@@ -631,7 +631,7 @@ def toggle_block(client_id: int=Form(...), admin_token: str=Cookie(default=None)
     c = conn.cursor(cursor_factory=RealDictCursor)
     c.execute("SELECT blocked FROM clients WHERE id=%s", (client_id,))
     row = c.fetchone()
-    new_val = 0 if row[0] else 1
+    new_val = 0 if row['blocked'] else 1
     c.execute("UPDATE clients SET blocked=%s WHERE id=%s", (new_val, client_id))
     conn.commit()
     conn.close()
@@ -648,6 +648,7 @@ def admin_logout(admin_token: str=Cookie(default=None)):
         conn.close()
     resp = RedirectResponse("/smartpochi-admin")
     resp.delete_cookie("admin_token")
+    return resp
     return resp
 
 # ─── BUDGET TRACKER ───────────────────────────────
