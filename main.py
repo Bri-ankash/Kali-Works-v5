@@ -4,7 +4,9 @@
 
 import os
 import re
-import sqlite3
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from database import get_conn, DB_URL, init_db
 import secrets
 import hashlib
 import smtplib
@@ -28,7 +30,7 @@ load_dotenv()
 os.makedirs("data/uploads", exist_ok=True)
 os.makedirs("static", exist_ok=True)
 
-from database import init_db, DB_PATH
+from database import init_db, get_conn, DB_URL
 
 UPLOAD_DIR = Path("data/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -70,28 +72,27 @@ def send_email(to_email, subject, body_html):
 
 def verify_admin_session(token):
     if not token: return False
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT created_at FROM admin_sessions WHERE token=?", (token,))
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("SELECT created_at FROM admin_sessions WHERE token=%s", (token,))
     row = c.fetchone()
     conn.close()
     if not row: return False
-    created = datetime.fromisoformat(row[0])
+    created = datetime.fromisoformat(str(row['created_at']))
     return datetime.now() - created < timedelta(hours=8)
 
 def get_client(client_id):
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    c.execute("SELECT * FROM clients WHERE id=?", (client_id,))
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("SELECT * FROM clients WHERE id=%s", (client_id,))
     row = c.fetchone()
     conn.close()
     return dict(row) if row else None
 
 def log_action(action):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO audit_logs (action, timestamp) VALUES (?,?)", (action, str(datetime.now())))
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("INSERT INTO audit_logs (action, timestamp) VALUES (%s,%s)", (action, str(datetime.now())))
     conn.commit()
     conn.close()
 
@@ -194,14 +195,14 @@ def register(request: Request, fname: str=Form(...), lname: str=Form(...),
              password: str=Form(...), confirm_password: str=Form(...)):
     if password != confirm_password:
         return templates.TemplateResponse("register.html", {"request":request,"error":"Passwords do not match"})
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT id FROM clients WHERE email=? OR mobile=?", (email, mobile))
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("SELECT id FROM clients WHERE email=%s OR mobile=%s", (email, mobile))
     if c.fetchone():
         conn.close()
         return templates.TemplateResponse("register.html", {"request":request,"error":"Email or phone already registered."})
     hashed = hash_password(password)
-    c.execute("INSERT INTO clients (fname,lname,id_pass,email,mobile,password) VALUES (?,?,?,?,?,?)",
+    c.execute("INSERT INTO clients (fname,lname,id_pass,email,mobile,password) VALUES (%s,%s,%s,%s,%s,%s)",
               (fname,lname,id_pass,email,mobile,hashed))
     conn.commit()
     conn.close()
@@ -222,9 +223,9 @@ def confirm_email_page(request: Request, email: str):
 
 @app.post("/confirm_email")
 def confirm_email(request: Request, email: str=Form(...)):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("UPDATE clients SET verified=1 WHERE email=?", (email,))
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("UPDATE clients SET verified=1 WHERE email=%s", (email,))
     conn.commit()
     conn.close()
     return templates.TemplateResponse("email_verified.html", {"request":request,"message":"Email verified! ✅ Waiting for admin approval."})
@@ -233,10 +234,9 @@ def confirm_email(request: Request, email: str=Form(...)):
 @app.post("/client_login")
 def client_login(request: Request, account_number: str=Form(...), password: str=Form(...)):
     hashed = hash_password(password)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    c.execute("SELECT * FROM clients WHERE account_number=? AND password=? AND verified=1", (account_number, hashed))
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("SELECT * FROM clients WHERE account_number=%s AND password=%s AND verified=1", (account_number, hashed))
     client = c.fetchone()
     conn.close()
     if not client:
@@ -275,50 +275,49 @@ def client_dashboard(request: Request, client_id: int):
     client = get_client(client_id)
     if not client:
         return RedirectResponse("/login_page")
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
     # Get uploads (limit 5 for normal, unlimited for premium)
     limit = 100 if client['premium'] else 5
-    c.execute("SELECT * FROM csv_uploads WHERE client_id=? ORDER BY uploaded_at DESC LIMIT ?", (client_id, limit))
+    c.execute("SELECT * FROM csv_uploads WHERE client_id=%s ORDER BY uploaded_at DESC LIMIT %s", (client_id, limit))
     uploads = [dict(r) for r in c.fetchall()]
     # Parse analysis
     for u in uploads:
         try: u['analysis'] = eval(u['analysis'])
         except: u['analysis'] = {}
     # Goals
-    c.execute("SELECT * FROM goals WHERE client_id=?", (client_id,))
+    c.execute("SELECT * FROM goals WHERE client_id=%s", (client_id,))
     goals = [dict(r) for r in c.fetchall()]
     # Suppliers (premium)
     suppliers = []
     if client['premium']:
-        c.execute("SELECT * FROM suppliers WHERE client_id=? ORDER BY due_date", (client_id,))
+        c.execute("SELECT * FROM suppliers WHERE client_id=%s ORDER BY due_date", (client_id,))
         suppliers = [dict(r) for r in c.fetchall()]
     # Staff salaries (premium)
     salaries = []
     if client['premium']:
-        c.execute("SELECT * FROM staff_salaries WHERE client_id=? ORDER BY paid_date DESC LIMIT 10", (client_id,))
+        c.execute("SELECT * FROM staff_salaries WHERE client_id=%s ORDER BY paid_date DESC LIMIT 10", (client_id,))
         salaries = [dict(r) for r in c.fetchall()]
     # Float tracker (premium)
     float_data = None
     if client['premium']:
-        c.execute("SELECT * FROM float_tracker WHERE client_id=? ORDER BY recorded_at DESC LIMIT 1", (client_id,))
+        c.execute("SELECT * FROM float_tracker WHERE client_id=%s ORDER BY recorded_at DESC LIMIT 1", (client_id,))
         row = c.fetchone()
         float_data = dict(row) if row else None
     # Budgets
-    c.execute("SELECT * FROM budgets WHERE client_id=? ORDER BY month DESC", (client_id,))
+    c.execute("SELECT * FROM budgets WHERE client_id=%s ORDER BY month DESC", (client_id,))
     budgets = [dict(r) for r in c.fetchall()]
     # Invoices
-    c.execute("SELECT * FROM invoices WHERE client_id=? ORDER BY created_at DESC", (client_id,))
+    c.execute("SELECT * FROM invoices WHERE client_id=%s ORDER BY created_at DESC", (client_id,))
     invoices = [dict(r) for r in c.fetchall()]
     # Net Worth
-    c.execute("SELECT * FROM net_worth WHERE client_id=? ORDER BY recorded_at DESC LIMIT 6", (client_id,))
+    c.execute("SELECT * FROM net_worth WHERE client_id=%s ORDER BY recorded_at DESC LIMIT 6", (client_id,))
     net_worth_data = [dict(r) for r in c.fetchall()]
     # Customers
-    c.execute("SELECT * FROM customers WHERE client_id=? ORDER BY created_at DESC", (client_id,))
+    c.execute("SELECT * FROM customers WHERE client_id=%s ORDER BY created_at DESC", (client_id,))
     customers = [dict(r) for r in c.fetchall()]
     # Loans
-    c.execute("SELECT * FROM loans WHERE client_id=? ORDER BY created_at DESC", (client_id,))
+    c.execute("SELECT * FROM loans WHERE client_id=%s ORDER BY created_at DESC", (client_id,))
     loans = [dict(r) for r in c.fetchall()]
     conn.close()
     return templates.TemplateResponse("client_dashboard.html", {
@@ -346,9 +345,9 @@ def upload_csv(request: Request, client_id: int=Form(...), file: UploadFile=File
         return RedirectResponse("/login_page")
     # Check upload limit for normal users
     if not client['premium']:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("SELECT COUNT(*) FROM csv_uploads WHERE client_id=?", (client_id,))
+        conn = get_conn()
+        c = conn.cursor(cursor_factory=RealDictCursor)
+        c.execute("SELECT COUNT(*) FROM csv_uploads WHERE client_id=%s", (client_id,))
         count = c.fetchone()[0]
         conn.close()
         if count >= 5:
@@ -365,9 +364,9 @@ def upload_csv(request: Request, client_id: int=Form(...), file: UploadFile=File
         analysis = analyze_pdf_text(str(file_path))
     else:
         analysis = analyze_csv(str(file_path))
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO csv_uploads (client_id,filename,uploaded_at,analysis) VALUES (?,?,?,?)",
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("INSERT INTO csv_uploads (client_id,filename,uploaded_at,analysis) VALUES (%s,%s,%s,%s)",
               (client_id, filename, str(datetime.now()), str(analysis)))
     conn.commit()
     conn.close()
@@ -376,14 +375,14 @@ def upload_csv(request: Request, client_id: int=Form(...), file: UploadFile=File
 # ─── DELETE UPLOAD ────────────────────────────────
 @app.post("/delete_upload")
 def delete_upload(request: Request, upload_id: int=Form(...), client_id: int=Form(...)):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT filename FROM csv_uploads WHERE id=? AND client_id=?", (upload_id, client_id))
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("SELECT filename FROM csv_uploads WHERE id=%s AND client_id=%s", (upload_id, client_id))
     row = c.fetchone()
     if row:
         try: os.remove(UPLOAD_DIR / row[0])
         except: pass
-        c.execute("DELETE FROM csv_uploads WHERE id=?", (upload_id,))
+        c.execute("DELETE FROM csv_uploads WHERE id=%s", (upload_id,))
         conn.commit()
     conn.close()
     return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
@@ -392,9 +391,9 @@ def delete_upload(request: Request, upload_id: int=Form(...), client_id: int=For
 @app.post("/add_goal")
 def add_goal(request: Request, client_id: int=Form(...), title: str=Form(...),
              target_amount: float=Form(...), period: str=Form(...)):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO goals (client_id,title,target_amount,period) VALUES (?,?,?,?)",
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("INSERT INTO goals (client_id,title,target_amount,period) VALUES (%s,%s,%s,%s)",
               (client_id, title, target_amount, period))
     conn.commit()
     conn.close()
@@ -402,9 +401,9 @@ def add_goal(request: Request, client_id: int=Form(...), title: str=Form(...),
 
 @app.post("/delete_goal")
 def delete_goal(goal_id: int=Form(...), client_id: int=Form(...)):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("DELETE FROM goals WHERE id=? AND client_id=?", (goal_id, client_id))
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("DELETE FROM goals WHERE id=%s AND client_id=%s", (goal_id, client_id))
     conn.commit()
     conn.close()
     return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
@@ -413,9 +412,9 @@ def delete_goal(goal_id: int=Form(...), client_id: int=Form(...)):
 @app.post("/add_supplier")
 def add_supplier(request: Request, client_id: int=Form(...), name: str=Form(...),
                  amount_owed: float=Form(...), due_date: str=Form(...)):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO suppliers (client_id,name,amount_owed,due_date) VALUES (?,?,?,?)",
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("INSERT INTO suppliers (client_id,name,amount_owed,due_date) VALUES (%s,%s,%s,%s)",
               (client_id, name, amount_owed, due_date))
     conn.commit()
     conn.close()
@@ -423,9 +422,9 @@ def add_supplier(request: Request, client_id: int=Form(...), name: str=Form(...)
 
 @app.post("/delete_supplier")
 def delete_supplier(supplier_id: int=Form(...), client_id: int=Form(...)):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("DELETE FROM suppliers WHERE id=? AND client_id=?", (supplier_id, client_id))
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("DELETE FROM suppliers WHERE id=%s AND client_id=%s", (supplier_id, client_id))
     conn.commit()
     conn.close()
     return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
@@ -434,9 +433,9 @@ def delete_supplier(supplier_id: int=Form(...), client_id: int=Form(...)):
 @app.post("/add_salary")
 def add_salary(request: Request, client_id: int=Form(...), staff_name: str=Form(...),
                amount: float=Form(...), paid_date: str=Form(...)):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO staff_salaries (client_id,staff_name,amount,paid_date) VALUES (?,?,?,?)",
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("INSERT INTO staff_salaries (client_id,staff_name,amount,paid_date) VALUES (%s,%s,%s,%s)",
               (client_id, staff_name, amount, paid_date))
     conn.commit()
     conn.close()
@@ -446,9 +445,9 @@ def add_salary(request: Request, client_id: int=Form(...), staff_name: str=Form(
 @app.post("/update_float")
 def update_float(request: Request, client_id: int=Form(...),
                  float_amount: float=Form(...), alert_threshold: float=Form(...)):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO float_tracker (client_id,float_amount,alert_threshold) VALUES (?,?,?)",
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("INSERT INTO float_tracker (client_id,float_amount,alert_threshold) VALUES (%s,%s,%s)",
               (client_id, float_amount, alert_threshold))
     conn.commit()
     conn.close()
@@ -458,25 +457,25 @@ def update_float(request: Request, client_id: int=Form(...),
 @app.post("/change_password")
 def change_password(request: Request, client_id: int=Form(...),
                     old_password: str=Form(...), new_password: str=Form(...)):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT id FROM clients WHERE id=? AND password=?", (client_id, hash_password(old_password)))
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("SELECT id FROM clients WHERE id=%s AND password=%s", (client_id, hash_password(old_password)))
     if not c.fetchone():
         conn.close()
         return RedirectResponse(f"/client_dashboard/{client_id}?error=Wrong+current+password", status_code=303)
-    c.execute("UPDATE clients SET password=? WHERE id=?", (hash_password(new_password), client_id))
+    c.execute("UPDATE clients SET password=%s WHERE id=%s", (hash_password(new_password), client_id))
     conn.commit()
     conn.close()
     return RedirectResponse(f"/client_dashboard/{client_id}?success=Password+changed", status_code=303)
 
 @app.post("/toggle_2fa")
 def toggle_2fa(request: Request, client_id: int=Form(...)):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT two_fa_enabled FROM clients WHERE id=?", (client_id,))
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("SELECT two_fa_enabled FROM clients WHERE id=%s", (client_id,))
     row = c.fetchone()
     new_val = 0 if row[0] else 1
-    c.execute("UPDATE clients SET two_fa_enabled=? WHERE id=?", (new_val, client_id))
+    c.execute("UPDATE clients SET two_fa_enabled=%s WHERE id=%s", (new_val, client_id))
     conn.commit()
     conn.close()
     return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
@@ -549,9 +548,9 @@ def admin_2fa_verify(request: Request, username: str=Form(...), code: str=Form(.
     if admin_2fa_codes.get(username) != code:
         return templates.TemplateResponse("admin_2fa.html", {"request":request,"username":username,"error":"Invalid code"})
     token = secrets.token_hex(32)
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO admin_sessions (token,created_at) VALUES (?,?)", (token, str(datetime.now())))
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("INSERT INTO admin_sessions (token,created_at) VALUES (%s,%s)", (token, str(datetime.now())))
     conn.commit()
     conn.close()
     resp = RedirectResponse("/admin_dashboard", status_code=303)
@@ -562,17 +561,16 @@ def admin_2fa_verify(request: Request, username: str=Form(...), code: str=Form(.
 def admin_dashboard(request: Request, admin_token: str=Cookie(default=None)):
     if not verify_admin_session(admin_token):
         return RedirectResponse("/smartpochi-admin")
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
     c.execute("SELECT COUNT(*) FROM clients")
-    total = c.fetchone()[0]
+    total = c.fetchone()["count"]
     c.execute("SELECT COUNT(*) FROM clients WHERE premium=1")
-    premium = c.fetchone()[0]
+    premium = c.fetchone()["count"]
     c.execute("SELECT COUNT(*) FROM clients WHERE blocked=1")
-    blocked = c.fetchone()[0]
+    blocked = c.fetchone()["count"]
     c.execute("SELECT COUNT(*) FROM clients WHERE verified=1")
-    verified = c.fetchone()[0]
+    verified = c.fetchone()["count"]
     c.execute("SELECT * FROM clients WHERE approved=0 AND verified=1")
     pending = [dict(r) for r in c.fetchall()]
     c.execute("SELECT * FROM clients WHERE approved=1 ORDER BY id DESC")
@@ -591,11 +589,11 @@ def approve_client(request: Request, client_id: int=Form(...),
                    account_number: str=Form(...), admin_token: str=Cookie(default=None)):
     if not verify_admin_session(admin_token):
         return RedirectResponse("/smartpochi-admin")
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("UPDATE clients SET approved=1, account_number=? WHERE id=?", (account_number, client_id))
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("UPDATE clients SET approved=1, account_number=%s WHERE id=%s", (account_number, client_id))
     conn.commit()
-    c.execute("SELECT email, fname FROM clients WHERE id=?", (client_id,))
+    c.execute("SELECT email, fname FROM clients WHERE id=%s", (client_id,))
     row = c.fetchone()
     conn.close()
     if row:
@@ -614,12 +612,12 @@ def approve_client(request: Request, client_id: int=Form(...),
 def toggle_premium(client_id: int=Form(...), admin_token: str=Cookie(default=None)):
     if not verify_admin_session(admin_token):
         return RedirectResponse("/smartpochi-admin")
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT premium FROM clients WHERE id=?", (client_id,))
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("SELECT premium FROM clients WHERE id=%s", (client_id,))
     row = c.fetchone()
     new_val = 0 if row[0] else 1
-    c.execute("UPDATE clients SET premium=? WHERE id=?", (new_val, client_id))
+    c.execute("UPDATE clients SET premium=%s WHERE id=%s", (new_val, client_id))
     conn.commit()
     conn.close()
     log_action(f"Toggled premium for client {client_id} to {new_val}")
@@ -629,12 +627,12 @@ def toggle_premium(client_id: int=Form(...), admin_token: str=Cookie(default=Non
 def toggle_block(client_id: int=Form(...), admin_token: str=Cookie(default=None)):
     if not verify_admin_session(admin_token):
         return RedirectResponse("/smartpochi-admin")
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT blocked FROM clients WHERE id=?", (client_id,))
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("SELECT blocked FROM clients WHERE id=%s", (client_id,))
     row = c.fetchone()
     new_val = 0 if row[0] else 1
-    c.execute("UPDATE clients SET blocked=? WHERE id=?", (new_val, client_id))
+    c.execute("UPDATE clients SET blocked=%s WHERE id=%s", (new_val, client_id))
     conn.commit()
     conn.close()
     log_action(f"Toggled block for client {client_id} to {new_val}")
@@ -643,9 +641,9 @@ def toggle_block(client_id: int=Form(...), admin_token: str=Cookie(default=None)
 @app.get("/admin_logout")
 def admin_logout(admin_token: str=Cookie(default=None)):
     if admin_token:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("DELETE FROM admin_sessions WHERE token=?", (admin_token,))
+        conn = get_conn()
+        c = conn.cursor(cursor_factory=RealDictCursor)
+        c.execute("DELETE FROM admin_sessions WHERE token=%s", (admin_token,))
         conn.commit()
         conn.close()
     resp = RedirectResponse("/smartpochi-admin")
@@ -656,9 +654,9 @@ def admin_logout(admin_token: str=Cookie(default=None)):
 @app.post("/add_budget")
 def add_budget(request: Request, client_id: int=Form(...), category: str=Form(...),
                budget_amount: float=Form(...), month: str=Form(...)):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO budgets (client_id,category,budget_amount,month) VALUES (?,?,?,?)",
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("INSERT INTO budgets (client_id,category,budget_amount,month) VALUES (%s,%s,%s,%s)",
               (client_id, category, budget_amount, month))
     conn.commit()
     conn.close()
@@ -666,9 +664,9 @@ def add_budget(request: Request, client_id: int=Form(...), category: str=Form(..
 
 @app.post("/delete_budget")
 def delete_budget(budget_id: int=Form(...), client_id: int=Form(...)):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("DELETE FROM budgets WHERE id=? AND client_id=?", (budget_id, client_id))
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("DELETE FROM budgets WHERE id=%s AND client_id=%s", (budget_id, client_id))
     conn.commit()
     conn.close()
     return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
@@ -678,12 +676,12 @@ def delete_budget(budget_id: int=Form(...), client_id: int=Form(...)):
 def create_invoice(request: Request, client_id: int=Form(...),
                    client_name: str=Form(...), client_email: str=Form(...),
                    items: str=Form(...), total: float=Form(...)):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT COUNT(*) FROM invoices WHERE client_id=?", (client_id,))
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("SELECT COUNT(*) FROM invoices WHERE client_id=%s", (client_id,))
     count = c.fetchone()[0] + 1
     inv_num = f"SP-INV-{client_id}-{count:03d}"
-    c.execute("INSERT INTO invoices (client_id,invoice_number,client_name,client_email,items,total) VALUES (?,?,?,?,?,?)",
+    c.execute("INSERT INTO invoices (client_id,invoice_number,client_name,client_email,items,total) VALUES (%s,%s,%s,%s,%s,%s)",
               (client_id, inv_num, client_name, client_email, items, total))
     conn.commit()
     conn.close()
@@ -691,18 +689,18 @@ def create_invoice(request: Request, client_id: int=Form(...),
 
 @app.post("/mark_invoice_paid")
 def mark_invoice_paid(invoice_id: int=Form(...), client_id: int=Form(...)):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("UPDATE invoices SET status='paid' WHERE id=? AND client_id=?", (invoice_id, client_id))
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("UPDATE invoices SET status='paid' WHERE id=%s AND client_id=%s", (invoice_id, client_id))
     conn.commit()
     conn.close()
     return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
 
 @app.post("/delete_invoice")
 def delete_invoice(invoice_id: int=Form(...), client_id: int=Form(...)):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("DELETE FROM invoices WHERE id=? AND client_id=?", (invoice_id, client_id))
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("DELETE FROM invoices WHERE id=%s AND client_id=%s", (invoice_id, client_id))
     conn.commit()
     conn.close()
     return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
@@ -710,9 +708,9 @@ def delete_invoice(invoice_id: int=Form(...), client_id: int=Form(...)):
 # ─── NET WORTH ────────────────────────────────────
 @app.post("/add_net_worth")
 def add_net_worth(client_id: int=Form(...), assets: float=Form(...), liabilities: float=Form(...)):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO net_worth (client_id,assets,liabilities) VALUES (?,?,?)",
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("INSERT INTO net_worth (client_id,assets,liabilities) VALUES (%s,%s,%s)",
               (client_id, assets, liabilities))
     conn.commit()
     conn.close()
@@ -722,9 +720,9 @@ def add_net_worth(client_id: int=Form(...), assets: float=Form(...), liabilities
 @app.post("/add_customer")
 def add_customer(client_id: int=Form(...), name: str=Form(...), phone: str=Form(...),
                  email: str=Form(""), amount_owed: float=Form(0), notes: str=Form("")):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO customers (client_id,name,phone,email,amount_owed,notes) VALUES (?,?,?,?,?,?)",
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("INSERT INTO customers (client_id,name,phone,email,amount_owed,notes) VALUES (%s,%s,%s,%s,%s,%s)",
               (client_id, name, phone, email, amount_owed, notes))
     conn.commit()
     conn.close()
@@ -732,9 +730,9 @@ def add_customer(client_id: int=Form(...), name: str=Form(...), phone: str=Form(
 
 @app.post("/delete_customer")
 def delete_customer(customer_id: int=Form(...), client_id: int=Form(...)):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("DELETE FROM customers WHERE id=? AND client_id=?", (customer_id, client_id))
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("DELETE FROM customers WHERE id=%s AND client_id=%s", (customer_id, client_id))
     conn.commit()
     conn.close()
     return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
@@ -743,9 +741,9 @@ def delete_customer(customer_id: int=Form(...), client_id: int=Form(...)):
 @app.post("/add_loan")
 def add_loan(client_id: int=Form(...), lender: str=Form(...), principal: float=Form(...),
              interest_rate: float=Form(...), months: int=Form(...), start_date: str=Form(...)):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO loans (client_id,lender,principal,interest_rate,months,start_date) VALUES (?,?,?,?,?,?)",
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("INSERT INTO loans (client_id,lender,principal,interest_rate,months,start_date) VALUES (%s,%s,%s,%s,%s,%s)",
               (client_id, lender, principal, interest_rate, months, start_date))
     conn.commit()
     conn.close()
@@ -753,9 +751,9 @@ def add_loan(client_id: int=Form(...), lender: str=Form(...), principal: float=F
 
 @app.post("/delete_loan")
 def delete_loan(loan_id: int=Form(...), client_id: int=Form(...)):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("DELETE FROM loans WHERE id=? AND client_id=?", (loan_id, client_id))
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    c.execute("DELETE FROM loans WHERE id=%s AND client_id=%s", (loan_id, client_id))
     conn.commit()
     conn.close()
     return RedirectResponse(f"/client_dashboard/{client_id}", status_code=303)
