@@ -599,12 +599,12 @@ def approve_client(request: Request, client_id: int=Form(...),
     if row:
         html = f"""<div style='font-family:Arial;padding:20px;background:#0a1220;color:#e8f4ff;border-radius:10px'>
             <h2 style='color:#0ea5e9'>Smart Pochi Account Approved! 🎉</h2>
-            <p>Hello {row[0]},</p>
+            <p>Hello {row['fname']},</p>
             <p>Your account has been approved. Your login account number is:</p>
             <h1 style='color:#0ea5e9;letter-spacing:3px'>{account_number}</h1>
             <p>Login at: <a href='https://smart-pochi.onrender.com/login_page' style='color:#0ea5e9'>Smart Pochi</a></p>
         </div>"""
-        send_email(row[1], "Smart Pochi Account Approved!", html)
+        send_email(row['email'], "Smart Pochi Account Approved!", html)
     log_action(f"Approved client {client_id} with account {account_number}")
     return RedirectResponse("/admin_dashboard", status_code=303)
 
