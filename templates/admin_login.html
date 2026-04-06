@@ -5,31 +5,69 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Smart Pochi — Admin</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:#030608;color:#e8f4ff;font-family:'Segoe UI',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(245,158,11,0.05) 0%,transparent 70%);pointer-events:none}
-.box{background:#0a1220;border:1px solid rgba(245,158,11,0.3);border-radius:24px;padding:40px;width:100%;max-width:400px;position:relative;overflow:hidden}
-.box::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#f59e0b,transparent)}
-.logo{text-align:center;margin-bottom:32px}
-.logo-icon{font-size:48px;margin-bottom:8px}
-.logo h1{font-size:22px;font-weight:800}
-.logo h1 span{color:#f59e0b}
-.logo p{color:#7a99bb;font-size:13px;margin-top:4px}
-.badge{display:inline-block;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);color:#f59e0b;padding:4px 14px;border-radius:100px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:20px}
-.form-group{margin-bottom:18px}
-label{display:block;color:#7a99bb;font-size:12px;font-weight:600;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px}
-input{width:100%;background:#1e293b;border:1px solid rgba(245,158,11,0.2);border-radius:10px;padding:12px 16px;color:#e8f4ff;font-size:15px;outline:none;transition:border 0.2s}
-input:focus{border-color:#f59e0b}
-input::placeholder{color:#3a5270}
-.btn{width:100%;background:#f59e0b;color:#000;padding:13px;border-radius:10px;border:none;font-weight:700;font-size:15px;cursor:pointer;margin-top:8px;transition:all 0.2s}
-.btn:hover{background:#fbbf24;box-shadow:0 0 30px rgba(245,158,11,0.3)}
-.error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#ef4444;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px}
-</style>
+      * { margin:0; padding:0; box-sizing:border-box }
+      body {
+        background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+        color: #fff;
+        font-family: 'Segoe UI', -apple-system, sans-serif;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+      .card {
+        background: rgba(255,255,255,0.07);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 20px;
+        padding: 36px;
+        width: 100%;
+        max-width: 440px;
+      }
+      .logo { font-size: 22px; font-weight: 800; text-align: center; margin-bottom: 8px }
+      .logo span { color: #ffd700 }
+      h1 { font-size: 22px; font-weight: 800; margin-bottom: 6px; text-align: center }
+      .sub { color: rgba(255,255,255,0.6); font-size: 14px; text-align: center; margin-bottom: 28px }
+      .form-group { margin-bottom: 16px }
+      label { display: block; font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.8); margin-bottom: 6px }
+      input, select {
+        width: 100%;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 10px;
+        padding: 12px 14px;
+        color: #fff;
+        font-size: 14px;
+        outline: none;
+        font-family: inherit;
+        transition: border 0.2s;
+      }
+      input:focus, select:focus { border-color: #ffd700 }
+      input::placeholder { color: rgba(255,255,255,0.35) }
+      .btn {
+        width: 100%;
+        padding: 13px;
+        border-radius: 10px;
+        background: #ffd700;
+        color: #000;
+        font-weight: 700;
+        font-size: 15px;
+        border: none;
+        cursor: pointer;
+        transition: background 0.2s;
+        margin-top: 8px;
+      }
+      .btn:hover { background: #ffa500 }
+      .link { color: #ffd700; text-decoration: none; font-weight: 600 }
+      .bottom-link { text-align: center; margin-top: 18px; font-size: 13px; color: rgba(255,255,255,0.6) }
+      .error { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #f87171; padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 14px }
+      .success { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); color: #22c55e; padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 14px }
+    </style>
 </head>
 <body>
 <div class="box">
   <div class="logo">
-    <div class="logo-icon">👑</div>
+    <div class="logo-icon"></div>
     <h1>Smart<span>Pochi</span></h1>
     <p>Executive Control Center</p>
   </div>

@@ -606,7 +606,7 @@ def approve_client(request: Request, client_id: int=Form(...),
         </div>"""
         send_email(row['email'], "Smart Pochi Account Approved!", html)
     log_action(f"Approved client {client_id} with account {account_number}")
-    return RedirectResponse("/admin_dashboard", status_code=303)
+    return RedirectResponse("/sp-admin-kalali", status_code=303)
 
 @app.post("/toggle_premium")
 def toggle_premium(client_id: int=Form(...), admin_token: str=Cookie(default=None)):
@@ -621,7 +621,7 @@ def toggle_premium(client_id: int=Form(...), admin_token: str=Cookie(default=Non
     conn.commit()
     conn.close()
     log_action(f"Toggled premium for client {client_id} to {new_val}")
-    return RedirectResponse("/admin_dashboard", status_code=303)
+    return RedirectResponse("/sp-admin-kalali", status_code=303)
 
 @app.post("/toggle_block")
 def toggle_block(client_id: int=Form(...), admin_token: str=Cookie(default=None)):
@@ -636,7 +636,7 @@ def toggle_block(client_id: int=Form(...), admin_token: str=Cookie(default=None)
     conn.commit()
     conn.close()
     log_action(f"Toggled block for client {client_id} to {new_val}")
-    return RedirectResponse("/admin_dashboard", status_code=303)
+    return RedirectResponse("/sp-admin-kalali", status_code=303)
 
 @app.get("/admin_logout")
 def admin_logout(admin_token: str=Cookie(default=None)):
